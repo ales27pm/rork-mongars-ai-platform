@@ -12,6 +12,8 @@ expo-env.d.ts
 # Native
 ios/
 android/
+!/modules/dolphin-core-ml/ios/
+!/modules/dolphin-core-ml/android/
 *.orig.*
 *.jks
 *.p8

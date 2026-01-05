@@ -4,6 +4,6 @@
     "modules": ["DolphinCoreMLModule"]
   },
   "android": {
-    "modules": []
+    "modules": ["DolphinCoreMLModule"]
   }
 }
