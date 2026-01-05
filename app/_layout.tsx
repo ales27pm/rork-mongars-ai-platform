@@ -15,6 +15,7 @@ import { SommeilProvider } from "@/lib/providers/sommeil";
 import { UnifiedLLMProvider } from "@/lib/providers/unified-llm";
 import { ModelManagerProvider } from "@/lib/providers/model-manager";
 import { AuthProvider } from "@/lib/providers/auth";
+import { ContactsProvider } from "@/lib/providers/contacts";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -39,29 +40,34 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <AuthProvider>
-          <InstrumentationProvider>
-            <TelemetryProvider>
-              <ModelManagerProvider>
-                <UnifiedLLMProvider>
-                  <HippocampusProvider>
-                  <PersonalityProvider>
-                    <EvolutionProvider>
-                      <SelfModelProvider>
-                        <IntrospectionAPIProvider sessionId="main" startTime={Date.now()}>
-                          <SommeilProvider>
-                            <CognitionProvider>
-                              <RootLayoutNav />
-                            </CognitionProvider>
-                          </SommeilProvider>
-                        </IntrospectionAPIProvider>
-                      </SelfModelProvider>
-                    </EvolutionProvider>
-                  </PersonalityProvider>
-                  </HippocampusProvider>
-                </UnifiedLLMProvider>
-              </ModelManagerProvider>
-            </TelemetryProvider>
-          </InstrumentationProvider>
+          <ContactsProvider>
+            <InstrumentationProvider>
+              <TelemetryProvider>
+                <ModelManagerProvider>
+                  <UnifiedLLMProvider>
+                    <HippocampusProvider>
+                      <PersonalityProvider>
+                        <EvolutionProvider>
+                          <SelfModelProvider>
+                            <IntrospectionAPIProvider
+                              sessionId="main"
+                              startTime={Date.now()}
+                            >
+                              <SommeilProvider>
+                                <CognitionProvider>
+                                  <RootLayoutNav />
+                                </CognitionProvider>
+                              </SommeilProvider>
+                            </IntrospectionAPIProvider>
+                          </SelfModelProvider>
+                        </EvolutionProvider>
+                      </PersonalityProvider>
+                    </HippocampusProvider>
+                  </UnifiedLLMProvider>
+                </ModelManagerProvider>
+              </TelemetryProvider>
+            </InstrumentationProvider>
+          </ContactsProvider>
         </AuthProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>

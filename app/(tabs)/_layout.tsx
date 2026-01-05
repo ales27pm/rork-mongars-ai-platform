@@ -1,17 +1,26 @@
 import { Tabs } from "expo-router";
 import React from "react";
-import { MessageSquare, Database, Sparkles, Activity, Eye, Brain, Cpu } from "lucide-react-native";
+import {
+  MessageSquare,
+  Database,
+  Sparkles,
+  Activity,
+  Eye,
+  Brain,
+  Cpu,
+  BookUser,
+} from "lucide-react-native";
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#3b82f6',
-        tabBarInactiveTintColor: '#64748b',
+        tabBarActiveTintColor: "#3b82f6",
+        tabBarInactiveTintColor: "#64748b",
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#1e293b',
-          borderTopColor: '#334155',
+          backgroundColor: "#1e293b",
+          borderTopColor: "#334155",
         },
       }}
     >
@@ -19,28 +28,36 @@ export default function TabLayout() {
         name="chat"
         options={{
           title: "Chat",
-          tabBarIcon: ({ color, size }) => <MessageSquare size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <MessageSquare size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="memory"
         options={{
           title: "Memory",
-          tabBarIcon: ({ color, size }) => <Database size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Database size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="evolution"
         options={{
           title: "Evolution",
-          tabBarIcon: ({ color, size }) => <Sparkles size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Sparkles size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="diagnostics"
         options={{
           title: "Diagnostics",
-          tabBarIcon: ({ color, size }) => <Activity size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Activity size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -62,6 +79,15 @@ export default function TabLayout() {
         options={{
           title: "Models",
           tabBarIcon: ({ color, size }) => <Cpu size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="contacts"
+        options={{
+          title: "Contacts",
+          tabBarIcon: ({ color, size }) => (
+            <BookUser size={size} color={color} />
+          ),
         }}
       />
     </Tabs>

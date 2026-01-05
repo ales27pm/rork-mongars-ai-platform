@@ -1,10 +1,10 @@
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: "user" | "assistant" | "system";
   content: string;
   timestamp: number;
   confidence?: number;
-  source?: 'local' | 'cached';
+  source?: "local" | "cached";
   embedding?: number[];
   metadata?: {
     reasoning?: string;
@@ -33,8 +33,8 @@ export interface MemoryEntry {
 
 export interface PersonalityProfile {
   userId: string;
-  style: 'technical' | 'casual' | 'formal' | 'creative';
-  verbosity: 'concise' | 'normal' | 'detailed';
+  style: "technical" | "casual" | "formal" | "creative";
+  verbosity: "concise" | "normal" | "detailed";
   learningRate: number;
   adaptationHistory: {
     timestamp: number;
@@ -45,7 +45,7 @@ export interface PersonalityProfile {
 export interface EvolutionCycle {
   id: string;
   timestamp: number;
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'deferred';
+  status: "queued" | "running" | "completed" | "failed" | "deferred";
   reason?: string;
   metrics?: {
     samplesCollected: number;
@@ -78,9 +78,9 @@ export interface SystemMetrics {
 export interface ModelConfig {
   id: string;
   name: string;
-  provider: 'huggingface' | 'openai' | 'anthropic' | 'local';
+  provider: "huggingface" | "openai" | "anthropic" | "local";
   modelId: string;
-  quantization?: '4bit' | '8bit' | 'fp16' | 'fp32';
+  quantization?: "4bit" | "8bit" | "fp16" | "fp32";
   contextWindow: number;
   parameters: number;
   capabilities: {
@@ -103,6 +103,23 @@ export interface UnifiedLLMConfig {
 
 export interface ModelTokenizer {
   countTokens: (text: string) => number;
-  encodeText?: (text: string) => { inputIds: number[]; attentionMask: number[] };
+  encodeText?: (text: string) => {
+    inputIds: number[];
+    attentionMask: number[];
+  };
   decodeTokens?: (ids: number[]) => string;
+}
+
+export interface DeviceContact {
+  id: string;
+  name: string;
+  phoneNumbers: string[];
+  emails: string[];
+}
+
+export interface AgentTool<TParams = any, TResult = any> {
+  name: string;
+  description: string;
+  parameters: Record<string, any>;
+  execute: (params: TParams) => Promise<TResult>;
 }
