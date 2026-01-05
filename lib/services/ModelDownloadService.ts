@@ -68,38 +68,40 @@ export class ModelDownloadService {
     try {
       console.log('[ModelDownloadService] Fetching repo structure for:', repoId);
       
-      const apiUrl = `https://huggingface.co/api/models/${repoId}`;
-      console.log('[ModelDownloadService] Fetching model info from:', apiUrl);
+      const treeUrl = `https://huggingface.co/api/models/${repoId}/tree/main`;
+      console.log('[ModelDownloadService] Fetching file tree from:', treeUrl);
       
-      const modelResponse = await fetch(apiUrl, {
+      const treeResponse = await fetch(treeUrl, {
         headers: {
           'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; ModelDownloader/1.0)',
         },
       });
       
-      if (!modelResponse.ok) {
-        const errorText = await modelResponse.text();
-        console.error('[ModelDownloadService] Model API response:', modelResponse.status, errorText);
-        throw new Error(`Failed to fetch model info: ${modelResponse.status} ${modelResponse.statusText}`);
+      if (!treeResponse.ok) {
+        console.error('[ModelDownloadService] Tree API response:', treeResponse.status);
+        throw new Error(`Failed to fetch repo tree: ${treeResponse.status}`);
       }
       
-      const modelInfo = await modelResponse.json();
-      console.log('[ModelDownloadService] Model info received, siblings count:', modelInfo.siblings?.length || 0);
+      const treeData = await treeResponse.json();
+      console.log('[ModelDownloadService] Tree data received, files count:', treeData.length || 0);
       
-      if (!modelInfo.siblings || !Array.isArray(modelInfo.siblings)) {
-        console.error('[ModelDownloadService] No siblings field in response');
+      if (!Array.isArray(treeData)) {
+        console.error('[ModelDownloadService] Invalid tree response format');
         return [];
       }
       
-      const allFiles: HuggingFaceFile[] = modelInfo.siblings.map((file: any) => ({
-        path: file.rfilename,
-        size: file.size || 0,
-        lfs: file.lfs ? {
-          oid: file.lfs.oid,
-          size: file.lfs.size,
-          pointerSize: file.lfs.pointerSize,
-        } : undefined,
-      }));
+      const allFiles: HuggingFaceFile[] = treeData
+        .filter((item: any) => item.type === 'file')
+        .map((file: any) => ({
+          path: file.path,
+          size: file.size || 0,
+          lfs: file.lfs ? {
+            oid: file.lfs.oid || file.oid,
+            size: file.lfs.size || file.size,
+            pointerSize: file.lfs.pointerSize || 0,
+          } : undefined,
+        }));
       
       console.log(`[ModelDownloadService] Total files in repo: ${allFiles.length}`);
       console.log('[ModelDownloadService] Sample files:', allFiles.slice(0, 5).map(f => f.path));
@@ -113,7 +115,7 @@ export class ModelDownloadService {
       if (mlpackageFiles.length === 0) {
         console.warn('[ModelDownloadService] No .mlpackage files found. Looking for any model files...');
         const modelFiles = allFiles.filter(f => 
-          f.path && (f.path.endsWith('.bin') || f.path.endsWith('.mlmodel') || f.path.endsWith('.safetensors'))
+          f.path && (f.path.endsWith('.bin') || f.path.endsWith('.mlmodel') || f.path.endsWith('.safetensors') || f.path.endsWith('.mlmodelc'))
         );
         console.log(`[ModelDownloadService] Found ${modelFiles.length} alternative model files`);
         return modelFiles;
@@ -123,7 +125,7 @@ export class ModelDownloadService {
     } catch (error) {
       console.error('[ModelDownloadService] Failed to fetch repo files:', error);
       if (error instanceof Error) {
-        console.error('[ModelDownloadService] Error details:', error.message, error.stack);
+        console.error('[ModelDownloadService] Error details:', error.message);
       }
       throw error;
     }
