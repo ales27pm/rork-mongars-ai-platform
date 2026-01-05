@@ -376,13 +376,18 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
         source = inferenceSource;
         confidence = 0.88 + Math.random() * 0.1;
 
-        if (onStream && rawResponse) {
-          const words = rawResponse.split(" ");
-          for (let i = 0; i < words.length; i++) {
-            await new Promise((resolve) => setTimeout(resolve, 5));
-            onStream(words[i] + " ");
-          }
-        }
+        const response = await generateText({
+          messages: [{ role: "user", content: contextPrompt }],
+          onStream, // Pass the onStream callback directly
+        });
+
+        const { result, source: inferenceSource } = {
+          result: response,
+          source: "local" as const,
+        };
+        telemetry.endTimer("llm_inference", { source: inferenceSource });
+
+        rawResponse = result;
       } catch (error) {
         console.error("[Cognition] All inference paths failed:", error);
         telemetry.emit(
