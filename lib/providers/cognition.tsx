@@ -148,7 +148,9 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
       query: string,
     ): Promise<{ hasGap: boolean; confidence: number; context: string[] }> => {
       const recentContext = hippocampus.shortTermMemory.slice(-5);
-      const queryEmbedding = generateMockEmbedding(query);
+      const queryEmbedding = await generateRealEmbedding(query).catch(() =>
+        generateMockEmbedding(query),
+      );
 
       const semanticMatches = recentContext.filter((m) => {
         if (!m.embedding) return false;
