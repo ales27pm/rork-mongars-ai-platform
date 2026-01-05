@@ -14,6 +14,7 @@ import { CognitionProvider } from "@/lib/providers/cognition";
 import { SommeilProvider } from "@/lib/providers/sommeil";
 import { UnifiedLLMProvider } from "@/lib/providers/unified-llm";
 import { ModelManagerProvider } from "@/lib/providers/model-manager";
+import { AuthProvider } from "@/lib/providers/auth";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -22,6 +23,8 @@ const queryClient = new QueryClient();
 function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
     </Stack>
   );
@@ -35,29 +38,31 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <InstrumentationProvider>
-          <TelemetryProvider>
-            <ModelManagerProvider>
-              <UnifiedLLMProvider>
-                <HippocampusProvider>
-                <PersonalityProvider>
-                  <EvolutionProvider>
-                    <SelfModelProvider>
-                      <IntrospectionAPIProvider sessionId="main" startTime={Date.now()}>
-                        <SommeilProvider>
-                          <CognitionProvider>
-                            <RootLayoutNav />
-                          </CognitionProvider>
-                        </SommeilProvider>
-                      </IntrospectionAPIProvider>
-                    </SelfModelProvider>
-                  </EvolutionProvider>
-                </PersonalityProvider>
-                </HippocampusProvider>
-              </UnifiedLLMProvider>
-            </ModelManagerProvider>
-          </TelemetryProvider>
-        </InstrumentationProvider>
+        <AuthProvider>
+          <InstrumentationProvider>
+            <TelemetryProvider>
+              <ModelManagerProvider>
+                <UnifiedLLMProvider>
+                  <HippocampusProvider>
+                  <PersonalityProvider>
+                    <EvolutionProvider>
+                      <SelfModelProvider>
+                        <IntrospectionAPIProvider sessionId="main" startTime={Date.now()}>
+                          <SommeilProvider>
+                            <CognitionProvider>
+                              <RootLayoutNav />
+                            </CognitionProvider>
+                          </SommeilProvider>
+                        </IntrospectionAPIProvider>
+                      </SelfModelProvider>
+                    </EvolutionProvider>
+                  </PersonalityProvider>
+                  </HippocampusProvider>
+                </UnifiedLLMProvider>
+              </ModelManagerProvider>
+            </TelemetryProvider>
+          </InstrumentationProvider>
+        </AuthProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>
   );
