@@ -1,25 +1,27 @@
-import createContextHook from '@nkzw/create-context-hook';
-import { useCallback, useRef, useState } from 'react';
-import type { Message } from '@/types';
-import { useHippocampus } from './hippocampus';
-import { usePersonality } from './personality';
-import { useEvolution } from './evolution';
-import { useTelemetry } from './telemetry';
-import { useUnifiedLLM } from './unified-llm';
-import { useIntrospectionAPI } from './introspection-api';
-import { useInstrumentation } from './instrumentation';
-import { generateText } from '@rork-ai/toolkit-sdk';
-import { cosineSimilarity, generateMockEmbedding } from '@/lib/utils/embedding';
-import { SymbolicReasoner, LogicTrace } from '@/lib/utils/symbolic-reasoner';
-import { ModelSlotManager } from '@/lib/utils/slot-manager';
-import { CircuitBreaker } from '@/lib/utils/circuit-breaker';
-import { CuriosityEngine } from '@/lib/utils/curiosity-engine';
-import { MimicryEngine } from '@/lib/utils/mimicry-engine';
-import { ReflectiveEngine } from '@/lib/utils/reflective-engine';
-import { ProtoPhenomenologyDetector } from '@/lib/utils/proto-phenomenology-detector';
-import type { AffectiveField } from '@/types/affective';
-
-
+import createContextHook from "@nkzw/create-context-hook";
+import { useCallback, useRef, useState } from "react";
+import type { Message } from "@/types";
+import { useHippocampus } from "./hippocampus";
+import { usePersonality } from "./personality";
+import { useEvolution } from "./evolution";
+import { useTelemetry } from "./telemetry";
+import { useUnifiedLLM } from "./unified-llm";
+import { useIntrospectionAPI } from "./introspection-api";
+import { useInstrumentation } from "./instrumentation";
+import { generateText } from "@rork-ai/toolkit-sdk";
+import {
+  cosineSimilarity,
+  generateMockEmbedding,
+  generateRealEmbedding,
+} from "@/lib/utils/embedding";
+import { SymbolicReasoner, LogicTrace } from "@/lib/utils/symbolic-reasoner";
+import { ModelSlotManager } from "@/lib/utils/slot-manager";
+import { CircuitBreaker } from "@/lib/utils/circuit-breaker";
+import { CuriosityEngine } from "@/lib/utils/curiosity-engine";
+import { MimicryEngine } from "@/lib/utils/mimicry-engine";
+import { ReflectiveEngine } from "@/lib/utils/reflective-engine";
+import { ProtoPhenomenologyDetector } from "@/lib/utils/proto-phenomenology-detector";
+import type { AffectiveField } from "@/types/affective";
 
 interface ReasoningTrace {
   step: string;
@@ -43,22 +45,26 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
   const introspection = useIntrospectionAPI();
   const instrumentation = useInstrumentation();
   const [isGenerating, setIsGenerating] = useState(false);
-  const [lastSource, setLastSource] = useState<'local' | 'cached'>('local');
+  const [lastSource, setLastSource] = useState<"local" | "cached">("local");
   const [reasoningTrace, setReasoningTrace] = useState<ReasoningTrace[]>([]);
-  const [symbolicTrace, setSymbolicTrace] = useState<SymbolicTrace | null>(null);
-  
+  const [symbolicTrace, setSymbolicTrace] = useState<SymbolicTrace | null>(
+    null,
+  );
+
   const symbolicReasoner = useRef(new SymbolicReasoner());
   const slotManager = useRef(new ModelSlotManager());
-  const circuitBreaker = useRef(new CircuitBreaker({
-    failureThreshold: 3,
-    resetTimeout: 30000,
-    monitorWindow: 10,
-  }));
+  const circuitBreaker = useRef(
+    new CircuitBreaker({
+      failureThreshold: 3,
+      resetTimeout: 30000,
+      monitorWindow: 10,
+    }),
+  );
   const curiosityEngine = useRef(new CuriosityEngine());
   const mimicryEngine = useRef(new MimicryEngine());
   const reflectiveEngine = useRef(new ReflectiveEngine());
   const protoDetector = useRef(new ProtoPhenomenologyDetector());
-  
+
   const [affectiveState, setAffectiveState] = useState<AffectiveField>({
     v: 0.1,
     a: 0.3,
@@ -66,389 +72,476 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
     m: 0.6,
     timestamp: Date.now(),
   });
-  const [affectiveHistory, setAffectiveHistory] = useState<AffectiveField[]>([]);
+  const [affectiveHistory, setAffectiveHistory] = useState<AffectiveField[]>(
+    [],
+  );
 
-  const neuroSymbolicReasoning = useCallback((query: string): ReasoningTrace[] => {
-    const traces: ReasoningTrace[] = [];
-    
-    traces.push({
-      step: 'parse',
-      thought: 'Analyzing query structure and intent',
-      observation: `Query type: ${query.includes('?') ? 'interrogative' : 'declarative'}`,
-    });
+  const neuroSymbolicReasoning = useCallback(
+    (query: string): ReasoningTrace[] => {
+      const traces: ReasoningTrace[] = [];
 
-    if (query.toLowerCase().includes('why')) {
       traces.push({
-        step: 'causal_analysis',
-        thought: 'Causal reasoning required - analyzing cause-effect chain',
-        action: 'activate_causal_engine',
+        step: "parse",
+        thought: "Analyzing query structure and intent",
+        observation: `Query type: ${query.includes("?") ? "interrogative" : "declarative"}`,
       });
-    } else if (query.toLowerCase().includes('how')) {
+
+      if (query.toLowerCase().includes("why")) {
+        traces.push({
+          step: "causal_analysis",
+          thought: "Causal reasoning required - analyzing cause-effect chain",
+          action: "activate_causal_engine",
+        });
+      } else if (query.toLowerCase().includes("how")) {
+        traces.push({
+          step: "procedural_analysis",
+          thought: "Procedural reasoning required - identifying steps",
+          action: "activate_procedural_engine",
+        });
+      } else if (
+        query.toLowerCase().includes("compare") ||
+        query.toLowerCase().includes("difference")
+      ) {
+        traces.push({
+          step: "comparative_analysis",
+          thought: "Comparative reasoning required - identifying contrasts",
+          action: "activate_comparison_engine",
+        });
+      }
+
+      const semanticComplexity = query.split(" ").length > 10 ? "high" : "low";
       traces.push({
-        step: 'procedural_analysis',
-        thought: 'Procedural reasoning required - identifying steps',
-        action: 'activate_procedural_engine',
-      });
-    } else if (query.toLowerCase().includes('compare') || query.toLowerCase().includes('difference')) {
-      traces.push({
-        step: 'comparative_analysis',
-        thought: 'Comparative reasoning required - identifying contrasts',
-        action: 'activate_comparison_engine',
-      });
-    }
-
-    const semanticComplexity = query.split(' ').length > 10 ? 'high' : 'low';
-    traces.push({
-      step: 'complexity_assessment',
-      thought: `Semantic complexity: ${semanticComplexity}`,
-      observation: `Token count: ${query.split(' ').length}`,
-    });
-
-    const logicTraces = symbolicReasoner.current.analyze(query);
-    if (logicTraces.length > 0) {
-      traces.push({
-        step: 'symbolic_reasoning',
-        thought: `Applied ${logicTraces.length} symbolic logic rules`,
-        observation: logicTraces.map(t => t.rule).join(', '),
+        step: "complexity_assessment",
+        thought: `Semantic complexity: ${semanticComplexity}`,
+        observation: `Token count: ${query.split(" ").length}`,
       });
 
-      const predicates = symbolicReasoner.current.extractPredicates(query);
-      const consequences = symbolicReasoner.current.inferConsequences(predicates);
+      const logicTraces = symbolicReasoner.current.analyze(query);
+      if (logicTraces.length > 0) {
+        traces.push({
+          step: "symbolic_reasoning",
+          thought: `Applied ${logicTraces.length} symbolic logic rules`,
+          observation: logicTraces.map((t) => t.rule).join(", "),
+        });
 
-      setSymbolicTrace({
-        logicTraces,
-        predicates,
-        consequences,
+        const predicates = symbolicReasoner.current.extractPredicates(query);
+        const consequences =
+          symbolicReasoner.current.inferConsequences(predicates);
+
+        setSymbolicTrace({
+          logicTraces,
+          predicates,
+          consequences,
+        });
+
+        console.log("[SymbolicReasoning] Extracted predicates:", predicates);
+        console.log("[SymbolicReasoning] Inferred consequences:", consequences);
+      }
+
+      return traces;
+    },
+    [],
+  );
+
+  const detectCuriosityGap = useCallback(
+    async (
+      query: string,
+    ): Promise<{ hasGap: boolean; confidence: number; context: string[] }> => {
+      const recentContext = hippocampus.shortTermMemory.slice(-5);
+      const queryEmbedding = generateMockEmbedding(query);
+
+      const semanticMatches = recentContext.filter((m) => {
+        if (!m.embedding) return false;
+        const similarity = cosineSimilarity(queryEmbedding, m.embedding);
+        return similarity > 0.75;
       });
 
-      console.log('[SymbolicReasoning] Extracted predicates:', predicates);
-      console.log('[SymbolicReasoning] Inferred consequences:', consequences);
-    }
+      if (semanticMatches.length > 0) {
+        console.log("[Cognition] High semantic overlap - no curiosity gap");
+        return {
+          hasGap: false,
+          confidence: 0.9,
+          context: semanticMatches.map((m) => m.content),
+        };
+      }
 
-    return traces;
-  }, []);
+      const vectorResults = await hippocampus.vectorSearch(query, 3);
+      if (vectorResults.length > 0 && vectorResults[0].importance > 0.8) {
+        console.log("[Cognition] Knowledge gap filled via vector search");
+        return {
+          hasGap: false,
+          confidence: vectorResults[0].importance,
+          context: vectorResults.map((r) => r.content),
+        };
+      }
 
-  const detectCuriosityGap = useCallback((query: string): { hasGap: boolean; confidence: number; context: string[] } => {
-    const recentContext = hippocampus.shortTermMemory.slice(-5);
-    const queryEmbedding = generateMockEmbedding(query);
-    
-    const semanticMatches = recentContext.filter(m => {
-      if (!m.embedding) return false;
-      const similarity = cosineSimilarity(queryEmbedding, m.embedding);
-      return similarity > 0.75;
-    });
-    
-    if (semanticMatches.length > 0) {
-      console.log('[Cognition] High semantic overlap - no curiosity gap');
+      console.log(
+        "[Cognition] Curiosity gap detected - external research needed",
+      );
       return {
-        hasGap: false,
-        confidence: 0.9,
-        context: semanticMatches.map(m => m.content),
+        hasGap: true,
+        confidence: 0.3,
+        context: [],
       };
-    }
+    },
+    [hippocampus],
+  );
 
-    const vectorResults = hippocampus.vectorSearch(query, 3);
-    if (vectorResults.length > 0 && vectorResults[0].importance > 0.8) {
-      console.log('[Cognition] Knowledge gap filled via vector search');
-      return {
-        hasGap: false,
-        confidence: vectorResults[0].importance,
-        context: vectorResults.map(r => r.content),
-      };
-    }
+  const applyPersonality = useCallback(
+    (rawResponse: string): string => {
+      const { style, verbosity } = personality.profile;
 
-    console.log('[Cognition] Curiosity gap detected - external research needed');
-    return {
-      hasGap: true,
-      confidence: 0.3,
-      context: [],
-    };
-  }, [hippocampus]);
+      let adjusted = rawResponse;
 
-  const applyPersonality = useCallback((rawResponse: string): string => {
-    const { style, verbosity } = personality.profile;
+      switch (style) {
+        case "technical":
+          adjusted = `[Technical Mode] ${adjusted}`;
+          break;
+        case "casual":
+          adjusted = adjusted.replace(/\./g, "! 😊");
+          break;
+        case "formal":
+          adjusted = `Certainly. ${adjusted}`;
+          break;
+        case "creative":
+          adjusted = `✨ ${adjusted} ✨`;
+          break;
+      }
 
-    let adjusted = rawResponse;
+      if (verbosity === "concise") {
+        adjusted = adjusted.split(".")[0] + ".";
+      } else if (verbosity === "detailed") {
+        adjusted += "\n\nWould you like me to elaborate further?";
+      }
 
-    switch (style) {
-      case 'technical':
-        adjusted = `[Technical Mode] ${adjusted}`;
-        break;
-      case 'casual':
-        adjusted = adjusted.replace(/\./g, '! 😊');
-        break;
-      case 'formal':
-        adjusted = `Certainly. ${adjusted}`;
-        break;
-      case 'creative':
-        adjusted = `✨ ${adjusted} ✨`;
-        break;
-    }
+      return adjusted;
+    },
+    [personality.profile],
+  );
 
-    if (verbosity === 'concise') {
-      adjusted = adjusted.split('.')[0] + '.';
-    } else if (verbosity === 'detailed') {
-      adjusted += '\n\nWould you like me to elaborate further?';
-    }
-
-    return adjusted;
-  }, [personality.profile]);
-
-  const generateResponse = useCallback(async (
-    userMessage: string,
-    onStream?: (chunk: string) => void
-  ): Promise<Message> => {
-    setIsGenerating(true);
-    telemetry.startTimer('inference_total');
-    telemetry.emit('inference', 'query_started', { query_length: userMessage.length });
-    console.log('[Cognition] Processing query:', userMessage);
-
-    const userMsg: Message = {
-      id: `msg_user_${Date.now()}`,
-      role: 'user',
-      content: userMessage,
-      timestamp: Date.now(),
-      embedding: generateMockEmbedding(userMessage),
-    };
-    hippocampus.storeMessage(userMsg);
-
-    const humanAffect = mimicryEngine.current.inferHumanAffect(userMessage);
-    console.log('[Cognition] Human affect inferred:', humanAffect);
-
-    const [traces, curiosityAnalysis] = await Promise.all([
-      Promise.resolve(neuroSymbolicReasoning(userMessage)),
-      Promise.resolve(detectCuriosityGap(userMessage)),
-    ]);
-    setReasoningTrace(traces);
-
-    const recentContext = hippocampus.shortTermMemory.slice(-5).map(m => m.content);
-    const novelty = curiosityEngine.current.detectNovelty(userMessage, recentContext);
-    const uncertainty = curiosityEngine.current.evaluateUncertainty(
-      userMessage,
-      curiosityAnalysis.context,
-      curiosityAnalysis.confidence
-    );
-
-    const syntheticAffect = mimicryEngine.current.generateSyntheticAffect(
-      humanAffect,
-      userMessage
-    );
-    
-    const prevAffect = affectiveState;
-    const updatedAffect: AffectiveField = {
-      v: syntheticAffect.v,
-      a: syntheticAffect.a,
-      u: Math.max(uncertainty, syntheticAffect.u),
-      m: Math.min(1, syntheticAffect.m + (curiosityEngine.current.shouldExplore() ? 0.2 : 0)),
-      timestamp: Date.now(),
-    };
-    setAffectiveState(updatedAffect);
-    setAffectiveHistory(prev => [...prev, updatedAffect].slice(-50));
-
-    const cognitiveLoad = traces.length > 3 ? 0.7 : 0.4;
-    const attention = traces.map(t => t.step);
-    const predictions = new Map<string, number>([
-      ['response_quality', 0.8],
-      ['user_satisfaction', curiosityAnalysis.confidence],
-    ]);
-
-    const innerSnapshot = reflectiveEngine.current.monitorInternalState(
-      updatedAffect,
-      cognitiveLoad,
-      attention,
-      predictions
-    );
-
-    const innerStates = reflectiveEngine.current.getRecentInnerStates(10);
-    const recentCommentaries = innerStates.map(s => s.commentary);
-    const recentAffective = affectiveHistory.slice(-10);
-
-    protoDetector.current.detectSignatures(
-      innerStates,
-      recentCommentaries,
-      recentAffective
-    );
-
-    protoDetector.current.evaluatePhenomenalReportStructure(innerSnapshot.commentary);
-    protoDetector.current.evaluateAffectiveModulation(
-      userMessage,
-      prevAffect,
-      updatedAffect
-    );
-    
-    telemetry.startTimer('vector_search');
-    const initialResults = hippocampus.vectorSearch(userMessage, 5);
-    
-    const contextMemories = initialResults;
-    telemetry.endTimer('vector_search');
-
-    const conversationHistory = hippocampus.shortTermMemory.slice(-4);
-    const contextPrompt = [
-      `You are monGARS, an advanced AI assistant.`,
-      ``,
-      `Recent conversation:`,
-      ...conversationHistory.map(m => `${m.role}: ${m.content}`),
-      ``,
-      `Current query: ${userMessage}`,
-    ].join('\n');
-
-    let rawResponse: string;
-    let source: 'local' | 'cached';
-    let confidence: number;
-
-    const slot = slotManager.current.acquireSlot('unified-llm', 8192);
-    if (!slot) {
-      console.error('[Cognition] Failed to acquire model slot');
-    }
-
-    try {
-      telemetry.startTimer('llm_inference');
-      const modelInfo = unifiedLLM.getModelInfo();
-      console.log(`[Cognition] Using model: ${modelInfo.active?.name || 'Unknown'}`);
-      
-      console.log('[Cognition] Starting inference...');
-      telemetry.incrementCounter('inference_started');
-      
-      const response = await generateText({
-        messages: [
-          { role: 'user', content: contextPrompt },
-        ],
+  const generateResponse = useCallback(
+    async (
+      userMessage: string,
+      onStream?: (chunk: string) => void,
+    ): Promise<Message> => {
+      setIsGenerating(true);
+      telemetry.startTimer("inference_total");
+      telemetry.emit("inference", "query_started", {
+        query_length: userMessage.length,
       });
-      
-      const { result, source: inferenceSource } = { result: response, source: 'local' as const };
-      telemetry.endTimer('llm_inference', { source: inferenceSource });
+      console.log("[Cognition] Processing query:", userMessage);
 
-      rawResponse = result;
-      source = inferenceSource;
-      confidence = 0.88 + Math.random() * 0.1;
+      const userEmbedding = await generateRealEmbedding(userMessage).catch(() =>
+        generateMockEmbedding(userMessage),
+      );
+      const userMsg: Message = {
+        id: `msg_user_${Date.now()}`,
+        role: "user",
+        content: userMessage,
+        timestamp: Date.now(),
+        embedding: userEmbedding,
+      };
+      await hippocampus.storeMessage(userMsg);
 
-      if (onStream && rawResponse) {
-        const words = rawResponse.split(' ');
-        for (let i = 0; i < words.length; i++) {
-          await new Promise(resolve => setTimeout(resolve, 5));
-          onStream(words[i] + ' ');
+      const humanAffect = mimicryEngine.current.inferHumanAffect(userMessage);
+      console.log("[Cognition] Human affect inferred:", humanAffect);
+
+      const [traces, curiosityAnalysis] = await Promise.all([
+        Promise.resolve(neuroSymbolicReasoning(userMessage)),
+        detectCuriosityGap(userMessage),
+      ]);
+      setReasoningTrace(traces);
+
+      const recentContext = hippocampus.shortTermMemory
+        .slice(-5)
+        .map((m) => m.content);
+      const novelty = curiosityEngine.current.detectNovelty(
+        userMessage,
+        recentContext,
+      );
+      const uncertainty = curiosityEngine.current.evaluateUncertainty(
+        userMessage,
+        curiosityAnalysis.context,
+        curiosityAnalysis.confidence,
+      );
+
+      const syntheticAffect = mimicryEngine.current.generateSyntheticAffect(
+        humanAffect,
+        userMessage,
+      );
+
+      const prevAffect = affectiveState;
+      const updatedAffect: AffectiveField = {
+        v: syntheticAffect.v,
+        a: syntheticAffect.a,
+        u: Math.max(uncertainty, syntheticAffect.u),
+        m: Math.min(
+          1,
+          syntheticAffect.m +
+            (curiosityEngine.current.shouldExplore() ? 0.2 : 0),
+        ),
+        timestamp: Date.now(),
+      };
+      setAffectiveState(updatedAffect);
+      setAffectiveHistory((prev) => [...prev, updatedAffect].slice(-50));
+
+      const cognitiveLoad = traces.length > 3 ? 0.7 : 0.4;
+      const attention = traces.map((t) => t.step);
+      const predictions = new Map<string, number>([
+        ["response_quality", 0.8],
+        ["user_satisfaction", curiosityAnalysis.confidence],
+      ]);
+
+      const innerSnapshot = reflectiveEngine.current.monitorInternalState(
+        updatedAffect,
+        cognitiveLoad,
+        attention,
+        predictions,
+      );
+
+      const innerStates = reflectiveEngine.current.getRecentInnerStates(10);
+      const recentCommentaries = innerStates.map((s) => s.commentary);
+      const recentAffective = affectiveHistory.slice(-10);
+
+      protoDetector.current.detectSignatures(
+        innerStates,
+        recentCommentaries,
+        recentAffective,
+      );
+
+      protoDetector.current.evaluatePhenomenalReportStructure(
+        innerSnapshot.commentary,
+      );
+      protoDetector.current.evaluateAffectiveModulation(
+        userMessage,
+        prevAffect,
+        updatedAffect,
+      );
+
+      telemetry.startTimer("vector_search");
+      const initialResults = await hippocampus.vectorSearch(userMessage, 5);
+
+      const contextMemories = initialResults;
+      telemetry.endTimer("vector_search");
+
+      const conversationHistory = hippocampus.shortTermMemory.slice(-4);
+      const memoryContext =
+        contextMemories.length > 0
+          ? [
+              "Relevant long-term memories:",
+              ...contextMemories.map((m) => `- ${m.content}`),
+              "",
+            ]
+          : [];
+      const contextPrompt = [
+        `You are monGARS, an advanced AI assistant.`,
+        ``,
+        `Recent conversation:`,
+        ...conversationHistory.map((m) => `${m.role}: ${m.content}`),
+        ``,
+        ...memoryContext,
+        `Current query: ${userMessage}`,
+      ].join("\n");
+
+      let rawResponse: string;
+      let source: "local" | "cached";
+      let confidence: number;
+
+      const slot = slotManager.current.acquireSlot("unified-llm", 8192);
+      if (!slot) {
+        console.error("[Cognition] Failed to acquire model slot");
+      }
+
+      try {
+        telemetry.startTimer("llm_inference");
+        const modelInfo = unifiedLLM.getModelInfo();
+        console.log(
+          `[Cognition] Using model: ${modelInfo.active?.name || "Unknown"}`,
+        );
+
+        console.log("[Cognition] Starting inference...");
+        telemetry.incrementCounter("inference_started");
+
+        const response = await generateText({
+          messages: [{ role: "user", content: contextPrompt }],
+        });
+
+        const { result, source: inferenceSource } = {
+          result: response,
+          source: "local" as const,
+        };
+        telemetry.endTimer("llm_inference", { source: inferenceSource });
+
+        rawResponse = result;
+        source = inferenceSource;
+        confidence = 0.88 + Math.random() * 0.1;
+
+        if (onStream && rawResponse) {
+          const words = rawResponse.split(" ");
+          for (let i = 0; i < words.length; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            onStream(words[i] + " ");
+          }
+        }
+      } catch (error) {
+        console.error("[Cognition] All inference paths failed:", error);
+        telemetry.emit(
+          "inference",
+          "complete_failure",
+          { error: error instanceof Error ? error.message : "Unknown" },
+          "error",
+        );
+        telemetry.incrementCounter("inference_errors");
+        rawResponse = `I encountered an error processing your request. The system is experiencing difficulties. Error: ${error instanceof Error ? error.message : "Unknown"}`;
+        source = "local";
+        confidence = 0.2;
+      } finally {
+        if (slot) {
+          slotManager.current.releaseSlot(slot.id);
         }
       }
-    } catch (error) {
-      console.error('[Cognition] All inference paths failed:', error);
-      telemetry.emit('inference', 'complete_failure', { error: error instanceof Error ? error.message : 'Unknown' }, 'error');
-      telemetry.incrementCounter('inference_errors');
-      rawResponse = `I encountered an error processing your request. The system is experiencing difficulties. Error: ${error instanceof Error ? error.message : 'Unknown'}`;
-      source = 'local';
-      confidence = 0.2;
-    } finally {
-      if (slot) {
-        slotManager.current.releaseSlot(slot.id);
+
+      const adjustedResponse = applyPersonality(rawResponse);
+
+      const meaningDiscovered = curiosityEngine.current.discoverMeaningPatterns(
+        userMessage,
+        rawResponse,
+        confidence,
+      );
+
+      const uncertaintyReduction = Math.max(0, uncertainty - (1 - confidence));
+      curiosityEngine.current.recordExploration(
+        userMessage,
+        novelty,
+        uncertaintyReduction,
+        meaningDiscovered,
+      );
+      curiosityEngine.current.updateExplorationDrive(
+        novelty,
+        uncertaintyReduction,
+        meaningDiscovered,
+      );
+
+      mimicryEngine.current.createEmotionalMapping(
+        humanAffect,
+        updatedAffect,
+        userMessage,
+      );
+      mimicryEngine.current.extractLinguisticAnalogues(
+        userMessage,
+        rawResponse,
+      );
+      mimicryEngine.current.updateResonance(
+        humanAffect,
+        updatedAffect,
+        confidence,
+      );
+      mimicryEngine.current.recordMimicry(
+        userMessage,
+        updatedAffect,
+        mimicryEngine.current.getState().emotionalResonance,
+      );
+
+      const affectiveDelta =
+        Math.abs(updatedAffect.v - prevAffect.v) +
+        Math.abs(updatedAffect.a - prevAffect.a);
+      reflectiveEngine.current.updateMetaModel(
+        affectiveDelta,
+        personality.profile.style,
+        confidence,
+      );
+      reflectiveEngine.current.evaluateSelfCoherence();
+      reflectiveEngine.current.evaluateNarrativeContinuity();
+
+      const emergence = protoDetector.current.detectEmergence();
+      if (emergence.detected) {
+        console.log(
+          "[Cognition] Proto-phenomenology emergence detected:",
+          emergence,
+        );
       }
-    }
 
-    const adjustedResponse = applyPersonality(rawResponse);
+      const latency = telemetry.endTimer("inference_total");
+      telemetry.recordMetric("inference_latency_ms", latency, { source });
+      telemetry.recordMetric("inference_confidence", confidence, { source });
+      telemetry.emit("inference", "query_completed", {
+        latency,
+        confidence,
+        source,
+        curiosity_gap: curiosityAnalysis.hasGap,
+        context_used: contextMemories.length,
+      });
 
-    const meaningDiscovered = curiosityEngine.current.discoverMeaningPatterns(
-      userMessage,
-      rawResponse,
-      confidence
-    );
+      evolution.updateMetrics({
+        inferenceStats: {
+          totalRequests: evolution.metrics.inferenceStats.totalRequests + 1,
+          avgLatency:
+            (evolution.metrics.inferenceStats.avgLatency *
+              evolution.metrics.inferenceStats.totalRequests +
+              latency) /
+            (evolution.metrics.inferenceStats.totalRequests + 1),
+          cacheHitRate: curiosityAnalysis.hasGap
+            ? evolution.metrics.inferenceStats.cacheHitRate
+            : Math.min(1, evolution.metrics.inferenceStats.cacheHitRate + 0.01),
+          fallbackCount: evolution.metrics.inferenceStats.fallbackCount,
+        },
+      });
 
-    const uncertaintyReduction = Math.max(0, uncertainty - (1 - confidence));
-    curiosityEngine.current.recordExploration(
-      userMessage,
-      novelty,
-      uncertaintyReduction,
-      meaningDiscovered
-    );
-    curiosityEngine.current.updateExplorationDrive(
-      novelty,
-      uncertaintyReduction,
-      meaningDiscovered
-    );
+      const assistantEmbedding = await generateRealEmbedding(
+        adjustedResponse,
+      ).catch(() => generateMockEmbedding(adjustedResponse));
+      const message: Message = {
+        id: `msg_${Date.now()}`,
+        role: "assistant",
+        content: adjustedResponse,
+        timestamp: Date.now(),
+        confidence,
+        source,
+        embedding: assistantEmbedding,
+        metadata: {
+          curiosityGap: curiosityAnalysis.hasGap,
+          contextUsed: contextMemories.map((m) => m.id),
+          reasoning: traces.map((t) => `${t.step}: ${t.thought}`).join(" → "),
+          affectiveState: updatedAffect,
+          curiosityMetrics: curiosityEngine.current.getExplorationMetrics(),
+          mimicryMetrics: mimicryEngine.current.getMimicryMetrics(),
+          reflectiveMetrics: reflectiveEngine.current.getReflectiveMetrics(),
+          protoMetrics: protoDetector.current.getMetrics(),
+          emergence: emergence.detected ? emergence : undefined,
+        },
+      };
 
-    mimicryEngine.current.createEmotionalMapping(
-      humanAffect,
-      updatedAffect,
-      userMessage
-    );
-    mimicryEngine.current.extractLinguisticAnalogues(userMessage, rawResponse);
-    mimicryEngine.current.updateResonance(
-      humanAffect,
-      updatedAffect,
-      confidence
-    );
-    mimicryEngine.current.recordMimicry(
-      userMessage,
-      updatedAffect,
-      mimicryEngine.current.getState().emotionalResonance
-    );
+      setIsGenerating(false);
+      setLastSource(source);
 
-    const affectiveDelta = Math.abs(updatedAffect.v - prevAffect.v) + 
-      Math.abs(updatedAffect.a - prevAffect.a);
-    reflectiveEngine.current.updateMetaModel(
-      affectiveDelta,
-      personality.profile.style,
-      confidence
-    );
-    reflectiveEngine.current.evaluateSelfCoherence();
-    reflectiveEngine.current.evaluateNarrativeContinuity();
+      await hippocampus.storeMessage(message);
 
-    const emergence = protoDetector.current.detectEmergence();
-    if (emergence.detected) {
-      console.log('[Cognition] Proto-phenomenology emergence detected:', emergence);
-    }
+      if (confidence > 0.9) {
+        personality.adapt(
+          `High confidence response (${confidence.toFixed(2)}) - reinforcing current style`,
+        );
+        evolution.recordHighQualityInteraction(
+          userMessage,
+          adjustedResponse,
+          confidence,
+        );
+      }
 
-    const latency = telemetry.endTimer('inference_total');
-    telemetry.recordMetric('inference_latency_ms', latency, { source });
-    telemetry.recordMetric('inference_confidence', confidence, { source });
-    telemetry.emit('inference', 'query_completed', {
-      latency,
-      confidence,
-      source,
-      curiosity_gap: curiosityAnalysis.hasGap,
-      context_used: contextMemories.length,
-    });
-    
-    evolution.updateMetrics({
-      inferenceStats: {
-        totalRequests: evolution.metrics.inferenceStats.totalRequests + 1,
-        avgLatency: (evolution.metrics.inferenceStats.avgLatency * evolution.metrics.inferenceStats.totalRequests + latency) / (evolution.metrics.inferenceStats.totalRequests + 1),
-        cacheHitRate: curiosityAnalysis.hasGap ? evolution.metrics.inferenceStats.cacheHitRate : 
-          Math.min(1, evolution.metrics.inferenceStats.cacheHitRate + 0.01),
-        fallbackCount: evolution.metrics.inferenceStats.fallbackCount,
-      },
-    });
-
-    const message: Message = {
-      id: `msg_${Date.now()}`,
-      role: 'assistant',
-      content: adjustedResponse,
-      timestamp: Date.now(),
-      confidence,
-      source,
-      embedding: generateMockEmbedding(adjustedResponse),
-      metadata: {
-        curiosityGap: curiosityAnalysis.hasGap,
-        contextUsed: contextMemories.map(m => m.id),
-        reasoning: traces.map(t => `${t.step}: ${t.thought}`).join(' → '),
-        affectiveState: updatedAffect,
-        curiosityMetrics: curiosityEngine.current.getExplorationMetrics(),
-        mimicryMetrics: mimicryEngine.current.getMimicryMetrics(),
-        reflectiveMetrics: reflectiveEngine.current.getReflectiveMetrics(),
-        protoMetrics: protoDetector.current.getMetrics(),
-        emergence: emergence.detected ? emergence : undefined,
-      },
-    };
-
-    setIsGenerating(false);
-    setLastSource(source);
-
-    hippocampus.storeMessage(message);
-
-    if (confidence > 0.9) {
-      personality.adapt(`High confidence response (${confidence.toFixed(2)}) - reinforcing current style`);
-      evolution.recordHighQualityInteraction(userMessage, adjustedResponse, confidence);
-    }
-
-    return message;
-  }, [neuroSymbolicReasoning, detectCuriosityGap, hippocampus, applyPersonality, personality, evolution, telemetry, unifiedLLM, affectiveState, affectiveHistory]);
+      return message;
+    },
+    [
+      neuroSymbolicReasoning,
+      detectCuriosityGap,
+      hippocampus,
+      applyPersonality,
+      personality,
+      evolution,
+      telemetry,
+      unifiedLLM,
+      affectiveState,
+      affectiveHistory,
+    ],
+  );
 
   const clearReasoningTrace = useCallback(() => {
     setReasoningTrace([]);
@@ -463,9 +556,12 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
     return unifiedLLM.activeModel;
   }, [unifiedLLM]);
 
-  const switchModel = useCallback(async (modelId: string) => {
-    return unifiedLLM.switchModel(modelId);
-  }, [unifiedLLM]);
+  const switchModel = useCallback(
+    async (modelId: string) => {
+      return unifiedLLM.switchModel(modelId);
+    },
+    [unifiedLLM],
+  );
 
   const getCircuitBreakerMetrics = useCallback(() => {
     return circuitBreaker.current.getMetrics();
@@ -475,40 +571,47 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
     return circuitBreaker.current.getHealthScore();
   }, []);
 
-  const reflect = useCallback(async (query: string) => {
-    const endOp = instrumentation.startOperation('cognition', 'reflect-command', { query });
-    console.log('[Cognition] Reflection command received:', query);
-    
-    try {
-      const result = await introspection.reflect(query);
-      endOp();
-      return result;
-    } catch (error) {
-      console.error('[Cognition] Reflection failed:', error);
-      endOp();
-      throw error;
-    }
-  }, [introspection, instrumentation]);
+  const reflect = useCallback(
+    async (query: string) => {
+      const endOp = instrumentation.startOperation(
+        "cognition",
+        "reflect-command",
+        { query },
+      );
+      console.log("[Cognition] Reflection command received:", query);
+
+      try {
+        const result = await introspection.reflect(query);
+        endOp();
+        return result;
+      } catch (error) {
+        console.error("[Cognition] Reflection failed:", error);
+        endOp();
+        throw error;
+      }
+    },
+    [introspection, instrumentation],
+  );
 
   const auditSelf = useCallback(async () => {
-    const endOp = instrumentation.startOperation('cognition', 'audit-self');
-    console.log('[Cognition] Self-audit command received');
-    
+    const endOp = instrumentation.startOperation("cognition", "audit-self");
+    console.log("[Cognition] Self-audit command received");
+
     try {
       const result = await introspection.auditSelf();
       endOp();
       return result;
     } catch (error) {
-      console.error('[Cognition] Self-audit failed:', error);
+      console.error("[Cognition] Self-audit failed:", error);
       endOp();
       throw error;
     }
   }, [introspection, instrumentation]);
 
   const inspectCognitiveState = useCallback(() => {
-    const endOp = instrumentation.startOperation('cognition', 'inspect-state');
-    console.log('[Cognition] Inspecting cognitive state');
-    
+    const endOp = instrumentation.startOperation("cognition", "inspect-state");
+    console.log("[Cognition] Inspecting cognitive state");
+
     const state = introspection.queryCognitiveState();
     endOp();
     return state;
