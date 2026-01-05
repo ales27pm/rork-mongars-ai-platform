@@ -19,11 +19,19 @@
       "bundleIdentifier": "app.27pm.mongars",
       "infoPlist": {
         "UIBackgroundModes": [
-          "audio"
+          "audio",
+          "location"
         ],
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to record audio for voice questions and commands.",
         "NSFaceIDUsageDescription": "Allow $(PRODUCT_NAME) to access your Face ID biometric data.",
-        "NSContactsUsageDescription": "Allow access to contacts to enable AI assistant to find people in your address book."
+        "NSContactsUsageDescription": "Allow access to contacts to enable AI assistant to find people in your address book.",
+        "NSCalendarsUsageDescription": "Allow $(PRODUCT_NAME) to access your calendar",
+        "NSRemindersUsageDescription": "Allow $(PRODUCT_NAME) to access your reminders",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow $(PRODUCT_NAME) to use your location.",
+        "NSLocationAlwaysUsageDescription": "Allow $(PRODUCT_NAME) to use your location.",
+        "NSLocationWhenInUseUsageDescription": "Allow $(PRODUCT_NAME) to use your location.",
+        "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
+        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera"
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -44,7 +52,15 @@
         "WRITE_EXTERNAL_STORAGE",
         "INTERNET",
         "READ_CONTACTS",
-        "WRITE_CONTACTS"
+        "WRITE_CONTACTS",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA"
       ]
     },
     "web": {
@@ -85,6 +101,27 @@
         "expo-contacts",
         {
           "contactsPermission": "Allow $(PRODUCT_NAME) to access your contacts."
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "The app needs to access your calendar."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "isAndroidForegroundServiceEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true,
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you share them with your friends."
         }
       ]
     ],
