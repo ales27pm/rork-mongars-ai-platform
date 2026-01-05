@@ -219,9 +219,11 @@ public class DolphinCoreMLModule: Module {
 
   private func ensureModelLoaded() async throws {
     let state = DolphinCoreMLState.shared
-    let storedModelName = state.metadata["modelName"] as? String ?? "Dolphin"
+    let metadata = await state.metadata
+
+    let storedModelName = metadata["modelName"] as? String ?? "Dolphin"
     let storedComputeUnits: MLComputeUnits
-    if let rawValue = state.metadata["computeUnits"] as? Int,
+    if let rawValue = metadata["computeUnits"] as? Int,
        let units = MLComputeUnits(rawValue: rawValue) {
       storedComputeUnits = units
     } else {
