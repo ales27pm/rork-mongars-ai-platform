@@ -61,8 +61,9 @@ export class CrossPlatformMLService {
       if (Platform.OS === 'ios') {
         await this.initializeIOS();
       } else {
-        console.log('[CrossPlatformML] Using on-device fallback (no external models)');
-        this.implementation = 'fallback';
+        console.log('[CrossPlatformML] Initializing Transformers for embeddings');
+        await this.initializeTransformers();
+        this.implementation = 'transformers';
       }
 
       this.isInitialized = true;
@@ -95,6 +96,13 @@ export class CrossPlatformMLService {
     }
   }
 
+  private async initializeTransformers(): Promise<void> {
+    console.log('[CrossPlatformML] Initializing Transformers for Android/Web');
+    const { transformerEmbeddings } = await import('@/lib/utils/transformer-embeddings');
+    await transformerEmbeddings.initialize('all-MiniLM-L6-v2');
+    console.log('[CrossPlatformML] Transformers initialized successfully');
+  }
+
   async generateEmbedding(text: string, options?: EmbeddingOptions): Promise<number[]> {
     if (!this.isInitialized) {
       await this.initialize();
@@ -119,8 +127,13 @@ export class CrossPlatformMLService {
           });
           break;
         case 'transformers':
-          console.log('[CrossPlatformML] Transformers disabled in on-device mode, using fallback');
-          embedding = this.generateFallbackEmbedding(text, options?.normalize !== false);
+          console.log('[CrossPlatformML] Using Transformers for embedding');
+          const { transformerEmbeddings } = await import('@/lib/utils/transformer-embeddings');
+          const transformerPooling = (options?.pooling === 'max' ? 'mean' : options?.pooling) || 'mean';
+          embedding = await transformerEmbeddings.encode(text, {
+            normalize: options?.normalize !== false,
+            pooling: transformerPooling as 'mean' | 'cls',
+          });
           break;
         default:
           embedding = this.generateFallbackEmbedding(text, options?.normalize !== false);
@@ -166,8 +179,13 @@ export class CrossPlatformMLService {
             });
             break;
           case 'transformers':
-            console.log('[CrossPlatformML] Transformers disabled, using fallback for batch');
-            batchResults = batch.map(text => this.generateFallbackEmbedding(text, options?.normalize !== false));
+            console.log('[CrossPlatformML] Using Transformers for batch embeddings');
+            const { transformerEmbeddings } = await import('@/lib/utils/transformer-embeddings');
+            const batchPooling = (options?.pooling === 'max' ? 'mean' : options?.pooling) || 'mean';
+            batchResults = await transformerEmbeddings.encodeBatch(batch, {
+              normalize: options?.normalize !== false,
+              pooling: batchPooling as 'mean' | 'cls',
+            });
             break;
           default:
             batchResults = batch.map(text => this.generateFallbackEmbedding(text, options?.normalize !== false));

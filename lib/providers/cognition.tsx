@@ -8,6 +8,10 @@ import { useTelemetry } from "./telemetry";
 import { useUnifiedLLM } from "./unified-llm";
 import { useIntrospectionAPI } from "./introspection-api";
 import { useInstrumentation } from "./instrumentation";
+import { useCalendar } from "./calendar";
+import { useLocation } from "./location";
+import { useCamera } from "./camera";
+import { useContacts } from "./contacts";
 import { generateText } from "@rork-ai/toolkit-sdk";
 import {
   cosineSimilarity,
@@ -44,6 +48,10 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
   const unifiedLLM = useUnifiedLLM();
   const introspection = useIntrospectionAPI();
   const instrumentation = useInstrumentation();
+  const calendar = useCalendar();
+  const location = useLocation();
+  const camera = useCamera();
+  const contacts = useContacts();
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastSource, setLastSource] = useState<"local" | "cached">("local");
   const [reasoningTrace, setReasoningTrace] = useState<ReasoningTrace[]>([]);
@@ -335,13 +343,39 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
               "",
             ]
           : [];
+      
+      const availableTools: string[] = [];
+      if (contacts.contactSharingAllowed && contacts.permissionStatus === "granted") {
+        availableTools.push("contacts_search(query: string) - Search device contacts by name");
+      }
+      if (calendar.calendarSharingAllowed && calendar.permissionStatus === "granted") {
+        availableTools.push("calendar_search(query?: string, startDate?: string, endDate?: string) - Search calendar events");
+        availableTools.push("calendar_create(title: string, startDate: string, endDate: string, location?: string, notes?: string) - Create calendar event");
+      }
+      if (location.locationSharingAllowed && location.permissionStatus === "granted") {
+        availableTools.push("get_location(includeAddress?: boolean) - Get current GPS location");
+      }
+      if (camera.cameraSharingAllowed && camera.permissionStatus === "granted") {
+        availableTools.push("capture_image(source?: 'camera' | 'library') - Capture or select an image");
+      }
+      
+      const toolsContext = availableTools.length > 0
+        ? [
+            "",
+            "Available device tools:",
+            ...availableTools.map(tool => `- ${tool}`),
+            "",
+          ]
+        : [];
+      
       const contextPrompt = [
-        `You are monGARS, an advanced AI assistant.`,
+        `You are monGARS, an advanced AI assistant with access to device capabilities.`,
         ``,
         `Recent conversation:`,
         ...conversationHistory.map((m) => `${m.role}: ${m.content}`),
         ``,
         ...memoryContext,
+        ...toolsContext,
         `Current query: ${userMessage}`,
       ].join("\n");
 
@@ -531,6 +565,14 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
       unifiedLLM,
       affectiveState,
       affectiveHistory,
+      calendar.calendarSharingAllowed,
+      calendar.permissionStatus,
+      camera.cameraSharingAllowed,
+      camera.permissionStatus,
+      contacts.contactSharingAllowed,
+      contacts.permissionStatus,
+      location.locationSharingAllowed,
+      location.permissionStatus,
     ],
   );
 

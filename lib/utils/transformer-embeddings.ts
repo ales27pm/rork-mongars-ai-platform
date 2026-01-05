@@ -55,19 +55,28 @@ export class TransformerEmbeddingService {
     this.isInitializing = true;
     this.modelConfig = MODELS[modelName];
 
-    console.log(`[TransformerEmbeddings] On-device mode: using fallback embeddings`);
-    console.log('[TransformerEmbeddings] External model loading disabled');
+    console.log(`[TransformerEmbeddings] Initializing ${this.modelConfig.name}`);
 
     try {
-      console.log('[TransformerEmbeddings] Using on-device fallback implementation');
+      const { pipeline } = await import('@xenova/transformers');
+      console.log('[TransformerEmbeddings] Loading transformer pipeline...');
+      
+      this.pipeline = await pipeline('feature-extraction', this.modelConfig.name, {
+        progress_callback: (progress: any) => {
+          if (progress.status === 'progress') {
+            console.log(`[TransformerEmbeddings] Download progress: ${Math.round(progress.progress || 0)}%`);
+          }
+        },
+      });
+      
       this.isInitialized = true;
-
-      console.log('[TransformerEmbeddings] Initialization complete (fallback mode)');
+      console.log('[TransformerEmbeddings] Initialization complete');
       return true;
     } catch (error) {
       console.error('[TransformerEmbeddings] Initialization failed:', error);
-      this.isInitialized = false;
-      return false;
+      console.log('[TransformerEmbeddings] Falling back to deterministic embeddings');
+      this.isInitialized = true;
+      return true;
     } finally {
       this.isInitializing = false;
     }
@@ -83,8 +92,23 @@ export class TransformerEmbeddingService {
       await this.initialize();
     }
 
-    console.log('[TransformerEmbeddings] Using on-device fallback embedding');
-    return this.generateFallbackEmbedding(text);
+    if (!this.pipeline) {
+      console.log('[TransformerEmbeddings] Pipeline not available, using fallback');
+      return this.generateFallbackEmbedding(text);
+    }
+
+    try {
+      const result = await this.pipeline(text, {
+        pooling: options?.pooling || 'mean',
+        normalize: options?.normalize !== false,
+      });
+
+      const embedding = Array.from(result.data) as number[];
+      return embedding;
+    } catch (error) {
+      console.error('[TransformerEmbeddings] Encoding failed, using fallback:', error);
+      return this.generateFallbackEmbedding(text);
+    }
   }
 
   async encodeBatch(
@@ -95,8 +119,28 @@ export class TransformerEmbeddingService {
       await this.initialize();
     }
 
-    console.log(`[TransformerEmbeddings] Encoding batch of ${texts.length} texts (on-device fallback)`);
-    return texts.map(text => this.generateFallbackEmbedding(text));
+    if (!this.pipeline) {
+      console.log('[TransformerEmbeddings] Pipeline not available, using fallback for batch');
+      return texts.map(text => this.generateFallbackEmbedding(text));
+    }
+
+    console.log(`[TransformerEmbeddings] Encoding batch of ${texts.length} texts`);
+    const batchSize = options?.batchSize || 8;
+    const results: number[][] = [];
+
+    try {
+      for (let i = 0; i < texts.length; i += batchSize) {
+        const batch = texts.slice(i, i + batchSize);
+        const batchResults = await Promise.all(
+          batch.map(text => this.encode(text, options))
+        );
+        results.push(...batchResults);
+      }
+      return results;
+    } catch (error) {
+      console.error('[TransformerEmbeddings] Batch encoding failed, using fallback:', error);
+      return texts.map(text => this.generateFallbackEmbedding(text));
+    }
   }
 
   private generateFallbackEmbedding(text: string): number[] {

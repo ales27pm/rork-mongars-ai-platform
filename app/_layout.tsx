@@ -16,6 +16,9 @@ import { UnifiedLLMProvider } from "@/lib/providers/unified-llm";
 import { ModelManagerProvider } from "@/lib/providers/model-manager";
 import { AuthProvider } from "@/lib/providers/auth";
 import { ContactsProvider } from "@/lib/providers/contacts";
+import { CalendarProvider } from "@/lib/providers/calendar";
+import { LocationProvider } from "@/lib/providers/location";
+import { CameraProvider } from "@/lib/providers/camera";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -41,7 +44,10 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <AuthProvider>
           <ContactsProvider>
-            <InstrumentationProvider>
+            <CalendarProvider>
+              <LocationProvider>
+                <CameraProvider>
+                  <InstrumentationProvider>
               <TelemetryProvider>
                 <ModelManagerProvider>
                   <UnifiedLLMProvider>
@@ -67,6 +73,9 @@ export default function RootLayout() {
                 </ModelManagerProvider>
               </TelemetryProvider>
             </InstrumentationProvider>
+                </CameraProvider>
+              </LocationProvider>
+            </CalendarProvider>
           </ContactsProvider>
         </AuthProvider>
       </GestureHandlerRootView>
