@@ -68,36 +68,35 @@ export class ModelDownloadService {
     try {
       console.log('[ModelDownloadService] Fetching repo structure for:', repoId);
       
-      const treeUrl = `https://huggingface.co/api/models/${repoId}/tree/main`;
-      console.log('[ModelDownloadService] Fetching file tree from:', treeUrl);
+      const modelInfoUrl = `https://huggingface.co/api/models/${repoId}`;
+      console.log('[ModelDownloadService] Fetching model info from:', modelInfoUrl);
       
-      const treeResponse = await fetch(treeUrl, {
+      const infoResponse = await fetch(modelInfoUrl, {
         headers: {
           'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (compatible; ModelDownloader/1.0)',
         },
       });
       
-      if (!treeResponse.ok) {
-        console.error('[ModelDownloadService] Tree API response:', treeResponse.status);
-        throw new Error(`Failed to fetch repo tree: ${treeResponse.status}`);
+      if (!infoResponse.ok) {
+        console.error('[ModelDownloadService] Model info API response:', infoResponse.status);
+        throw new Error(`Failed to fetch model info: ${infoResponse.status}`);
       }
       
-      const treeData = await treeResponse.json();
-      console.log('[ModelDownloadService] Tree data received, files count:', treeData.length || 0);
+      const modelInfo = await infoResponse.json();
+      console.log('[ModelDownloadService] Model info received');
       
-      if (!Array.isArray(treeData)) {
-        console.error('[ModelDownloadService] Invalid tree response format');
+      if (!modelInfo.siblings || !Array.isArray(modelInfo.siblings)) {
+        console.error('[ModelDownloadService] No siblings field in response');
         return [];
       }
       
-      const allFiles: HuggingFaceFile[] = treeData
-        .filter((item: any) => item.type === 'file')
+      const allFiles: HuggingFaceFile[] = modelInfo.siblings
+        .filter((file: any) => file.rfilename)
         .map((file: any) => ({
-          path: file.path,
+          path: file.rfilename,
           size: file.size || 0,
           lfs: file.lfs ? {
-            oid: file.lfs.oid || file.oid,
+            oid: file.lfs.oid,
             size: file.lfs.size || file.size,
             pointerSize: file.lfs.pointerSize || 0,
           } : undefined,
