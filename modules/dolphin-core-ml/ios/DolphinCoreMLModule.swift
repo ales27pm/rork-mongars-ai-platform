@@ -265,57 +265,72 @@ public class DolphinCoreMLModule: Module {
   }
 
   private func runEncoding(texts: [String], options: [String: Any]) async throws -> [[Double]] {
+    let state = DolphinCoreMLState.shared
     try await ensureModelLoaded()
+    guard let model = await state.model else {
+      throw NSError(domain: "DolphinCoreML", code: -2, userInfo: [NSLocalizedDescriptionKey: "NO_MODEL_LOADED"])
+    }
+
     let start = Date()
     var embeddings: [[Double]] = []
+  
+    // This is a conceptual implementation. You will need to adapt it to your model's specifics.
+    for text in texts {
+      // let inputFeatureProvider = try createEmbeddingInput(text: text) // Prepare model input
+      // let output = try model.prediction(from: inputFeatureProvider)
+      // if let embeddingVector = extractEmbedding(from: output) { // Extract embedding from output
+      //   embeddings.append(embeddingVector)
+      // } else {
+        // Fallback to existing logic if model prediction fails
+        embeddings.append(self.fallbackEmbedding(for: text, options: options))
+      // }
+    }
+
+    let duration = Date().timeIntervalSince(start)
+    await state.recordEncoding(duration: duration)
+    return embeddings
+  }
+
+  // Extracted fallback logic for clarity
+  private func fallbackEmbedding(for text: String, options: [String: Any]) -> [Double] {
     let shouldNormalize = options["normalize"] as? Bool ?? true
     let maxLength = options["maxLength"] as? Int ?? 512
     let truncationEnabled = options["truncation"] as? Bool ?? true
 
-    for text in texts {
-      let preparedText: String
-      if truncationEnabled && text.count > maxLength {
-        let index = text.index(text.startIndex, offsetBy: maxLength)
-        preparedText = String(text[..<index])
-      } else {
-        preparedText = text
-      }
-
-      if let embedding = NLEmbedding.wordEmbedding(forLanguage: .english) {
-        let tokens = preparedText.split(separator: " ").map(String.init)
-        let vectors = tokens.compactMap { embedding.vector(for: $0) }
-        if let first = vectors.first {
-          let dimension = first.count
-          var aggregate = Array(repeating: 0.0, count: dimension)
-
-          for vector in vectors {
-            for (index, value) in vector.enumerated() {
-              aggregate[index] += Double(value)
-            }
-          }
-
-          let count = Double(max(vectors.count, 1))
-          var averaged = aggregate.map { $0 / count }
-
-          if shouldNormalize {
-            let magnitude = sqrt(averaged.reduce(0) { $0 + $1 * $1 })
-            if magnitude > 0 {
-              averaged = averaged.map { $0 / magnitude }
-            }
-          }
-
-          embeddings.append(averaged)
-        } else {
-          embeddings.append(self.generateDeterministicEmbedding(text: preparedText, dimension: 300, normalize: shouldNormalize))
-        }
-      } else {
-        embeddings.append(self.generateDeterministicEmbedding(text: preparedText, dimension: 300, normalize: shouldNormalize))
-      }
+    let preparedText: String
+    if truncationEnabled && text.count > maxLength {
+      let index = text.index(text.startIndex, offsetBy: maxLength)
+      preparedText = String(text[..<index])
+    } else {
+      preparedText = text
     }
 
-    let duration = Date().timeIntervalSince(start)
-    await DolphinCoreMLState.shared.recordEncoding(duration: duration)
-    return embeddings
+    if let embedding = NLEmbedding.wordEmbedding(forLanguage: .english) {
+      let tokens = preparedText.split(separator: " ").map(String.init)
+      let vectors = tokens.compactMap { embedding.vector(for: $0) }
+      if let first = vectors.first {
+        let dimension = first.count
+        var aggregate = Array(repeating: 0.0, count: dimension)
+
+        for vector in vectors {
+          for (index, value) in vector.enumerated() {
+            aggregate[index] += Double(value)
+          }
+        }
+
+        let count = Double(max(vectors.count, 1))
+        var averaged = aggregate.map { $0 / count }
+
+        if shouldNormalize {
+          let magnitude = sqrt(averaged.reduce(0) { $0 + $1 * $1 })
+          if magnitude > 0 {
+            averaged = averaged.map { $0 / magnitude }
+          }
+        }
+        return averaged
+      }
+    }
+    return self.generateDeterministicEmbedding(text: preparedText, dimension: 300, normalize: shouldNormalize)
   }
 
   private func generateDeterministicEmbedding(text: String, dimension: Int, normalize: Bool) -> [Double] {
