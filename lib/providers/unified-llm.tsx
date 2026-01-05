@@ -231,9 +231,9 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
         `[UnifiedLLM] Loaded configuration - Active: ${active?.name || "None"}`,
       );
     } catch (error) {
-      console.error("[UnifiedLLM] Load error:", error);
-    }
-  }, []);
+      "gen",
+      `${model.modelId}:${request.prompt}:${maxTokens}:${request.temperature}:${request.streaming}`,
+    );
 
   const saveConfig = useCallback(async () => {
     try {
