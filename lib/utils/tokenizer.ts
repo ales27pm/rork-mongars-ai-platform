@@ -77,6 +77,7 @@ export const decodeTokens = (ids: number[], options?: TokenizationOptions): stri
 };
 
 export const countTokens = (text: string, options?: TokenizationOptions): number => {
-  const { inputIds } = encodeText(text, options);
+  const tokenizerOptions = buildTokenizerOptions(options);
+  const inputIds = llama3Tokenizer.encode(text, tokenizerOptions);
   return inputIds.length;
 };
