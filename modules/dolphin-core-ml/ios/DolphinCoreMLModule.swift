@@ -145,7 +145,10 @@ public class DolphinCoreMLModule: Module {
         } catch {
           self.log.error("Failed to load model: \(error.localizedDescription)")
           let nsError = error as NSError
-          let stableCode = (nsError.userInfo["code"] as? String) ?? "MODEL_LOAD_FAILED"
+          let stableCode =
+            (nsError.userInfo["code"] as? String)
+            ?? ((nsError.userInfo[NSLocalizedDescriptionKey] as? String))
+            ?? "MODEL_LOAD_FAILED"
           return [
             "success": false,
             "error": [
