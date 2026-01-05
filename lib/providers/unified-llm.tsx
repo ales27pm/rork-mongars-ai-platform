@@ -132,9 +132,9 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
 
     const model = modelRegistry.current.getActiveModel();
     if (!model) {
-      throw new Error(
-        `Requested tokens (${totalRequestedTokens}) exceed the context window (${model.contextWindow}) for ${model.name}. Available completion tokens: ${available}.`,
-      );
+      throw new Error('[UnifiedLLM] No active model configured');
+    }
+
     const promptTokens = countTokensForModel(model, request.prompt);
     const maxTokens = request.maxTokens ?? 100;
     const totalRequestedTokens = promptTokens + maxTokens;

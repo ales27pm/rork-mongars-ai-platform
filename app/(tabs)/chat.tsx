@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import React, { useCallback, useRef, useState, useEffect } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { 
   View, 
   TextInput, 
@@ -14,10 +14,10 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Speech from 'expo-speech';
-import { Audio } from 'expo-av';
 import { Send, Brain, Clipboard as ClipboardIcon, Mic, Volume2, StopCircle } from 'lucide-react-native';
 import { useCognition } from '@/lib/providers/cognition';
 import { useHippocampus } from '@/lib/providers/hippocampus';
+import { useMicrophone } from '@/lib/hooks/useMicrophone';
 import type { Message } from '@/types';
 import type { ReflectionResult } from '@/types/introspection';
 import { format } from 'date-fns';
@@ -27,14 +27,18 @@ export default function ChatScreen() {
   const hippocampus = useHippocampus();
   const [input, setInput] = useState('');
   const [streamingText, setStreamingText] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const flatListRef = useRef<FlatList>(null);
+
+  const {
+    isRecording,
+    isWebSupported,
+    requestPermission,
+    startRecording,
+    stopRecording,
+  } = useMicrophone();
 
   const messages = hippocampus.shortTermMemory;
 
@@ -162,117 +166,46 @@ export default function ChatScreen() {
     }
   }, []);
 
-  const startRecording = useCallback(async () => {
-    try {
-      console.log('[STT] Starting recording...');
-      
-      if (Platform.OS === 'web') {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream);
-        mediaRecorderRef.current = mediaRecorder;
-        audioChunksRef.current = [];
-
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
-        };
-
-        mediaRecorder.start();
-        setIsRecording(true);
-        console.log('[STT] Web recording started');
-      } else {
-        await Audio.requestPermissionsAsync();
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-        });
-
-        const { recording } = await Audio.Recording.createAsync({
-          isMeteringEnabled: true,
-          android: {
-            extension: '.m4a',
-            outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-            audioEncoder: Audio.AndroidAudioEncoder.AAC,
-            sampleRate: 44100,
-            numberOfChannels: 2,
-            bitRate: 128000,
-          },
-          ios: {
-            extension: '.wav',
-            outputFormat: Audio.IOSOutputFormat.LINEARPCM,
-            audioQuality: Audio.IOSAudioQuality.HIGH,
-            sampleRate: 44100,
-            numberOfChannels: 2,
-            bitRate: 128000,
-            linearPCMBitDepth: 16,
-            linearPCMIsBigEndian: false,
-            linearPCMIsFloat: false,
-          },
-          web: {
-            mimeType: 'audio/webm',
-            bitsPerSecond: 128000,
-          },
-        });
-
-        recordingRef.current = recording;
-        setIsRecording(true);
-        console.log('[STT] Native recording started');
-      }
-    } catch (error) {
-      console.error('[STT] Failed to start recording:', error);
-      Alert.alert('Error', 'Failed to start recording. Please check microphone permissions.');
+  const handleVoiceInput = useCallback(async () => {
+    const granted = await requestPermission();
+    if (!granted) {
+      Alert.alert('Permission needed', 'Please enable microphone access to use voice input.');
+      return;
     }
-  }, []);
 
-  const stopRecording = useCallback(async () => {
-    try {
-      console.log('[STT] Stopping recording...');
-      setIsRecording(false);
-      setIsTranscribing(true);
+    if (Platform.OS === 'web' && !isWebSupported) {
+      Alert.alert('Unsupported', 'Voice recording is not available in this browser.');
+      return;
+    }
 
-      let audioBlob: Blob | null = null;
-      let audioUri: string | null = null;
-
-      if (Platform.OS === 'web') {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-          await new Promise<void>((resolve) => {
-            if (mediaRecorderRef.current) {
-              mediaRecorderRef.current.onstop = () => resolve();
-              mediaRecorderRef.current.stop();
-            }
-          });
-
-          audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-          mediaRecorderRef.current = null;
-          audioChunksRef.current = [];
-        }
-      } else {
-        if (recordingRef.current) {
-          await recordingRef.current.stopAndUnloadAsync();
-          audioUri = recordingRef.current.getURI();
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-          });
-          recordingRef.current = null;
-        }
+    if (!isRecording) {
+      try {
+        await startRecording();
+      } catch (error) {
+        console.error('[STT] Failed to start recording:', error);
+        Alert.alert('Error', 'Failed to start recording. Please check microphone permissions.');
       }
+      return;
+    }
 
-      if (!audioBlob && !audioUri) {
+    setIsTranscribing(true);
+
+    try {
+      const result = await stopRecording();
+      if (!result || (!result.blob && !result.uri)) {
         throw new Error('No audio data captured');
       }
 
       const formData = new FormData();
-      
-      if (Platform.OS === 'web' && audioBlob) {
-        formData.append('audio', audioBlob, 'recording.webm');
-      } else if (audioUri) {
-        const uriParts = audioUri.split('.');
+
+      if (Platform.OS === 'web' && result.blob) {
+        formData.append('audio', result.blob, 'recording.webm');
+      } else if (result.uri) {
+        const uriParts = result.uri.split('.');
         const fileType = uriParts[uriParts.length - 1];
-        
+
         const audioFile = {
-          uri: audioUri,
+          uri: result.uri,
           name: `recording.${fileType}`,
           type: `audio/${fileType}`,
         } as any;
@@ -290,11 +223,11 @@ export default function ChatScreen() {
         throw new Error(`Transcription failed: ${response.statusText}`);
       }
 
-      const result: { text: string; language: string } = await response.json();
-      console.log('[STT] Transcription result:', result);
+      const transcription: { text: string; language: string } = await response.json();
+      console.log('[STT] Transcription result:', transcription);
 
-      if (result.text) {
-        setInput(prev => prev ? `${prev} ${result.text}` : result.text);
+      if (transcription.text) {
+        setInput(prev => prev ? `${prev} ${transcription.text}` : transcription.text);
       }
     } catch (error) {
       console.error('[STT] Transcription error:', error);
@@ -302,27 +235,7 @@ export default function ChatScreen() {
     } finally {
       setIsTranscribing(false);
     }
-  }, []);
-
-  const handleVoiceInput = useCallback(async () => {
-    if (isRecording) {
-      await stopRecording();
-    } else {
-      await startRecording();
-    }
-  }, [isRecording, startRecording, stopRecording]);
-
-  useEffect(() => {
-    return () => {
-      if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync();
-      }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, []);
+  }, [requestPermission, isWebSupported, isRecording, startRecording, stopRecording]);
 
   const speakMessage = useCallback(async (messageId: string, content: string) => {
     if (isSpeaking && speakingMessageId === messageId) {
