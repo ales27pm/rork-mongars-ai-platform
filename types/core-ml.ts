@@ -8,9 +8,9 @@ export interface CoreMLModelConfig {
 }
 
 export enum ComputeUnit {
-  All = 'all',
-  CPUAndGPU = 'cpuAndGPU',
-  CPUOnly = 'cpuOnly',
+  All = "all",
+  CPUAndGPU = "cpuAndGPU",
+  CPUOnly = "cpuOnly",
 }
 
 export interface ModelMetadata {
@@ -34,10 +34,10 @@ export interface InferenceOptions {
 }
 
 export enum PoolingStrategy {
-  Mean = 'mean',
-  Max = 'max',
-  CLS = 'cls',
-  LastToken = 'last_token',
+  Mean = "mean",
+  Max = "max",
+  CLS = "cls",
+  LastToken = "last_token",
 }
 
 export interface GenerationConfig {
@@ -119,7 +119,7 @@ export interface StreamingToken {
 
 export interface ModelCacheEntry {
   key: string;
-  result: number[];
+  result: number[] | string;
   timestamp: number;
   hits: number;
   size: number;
@@ -134,13 +134,13 @@ export interface CoreMLError {
 }
 
 export enum CoreMLErrorCode {
-  ModelNotFound = 'MODEL_NOT_FOUND',
-  ModelLoadFailed = 'MODEL_LOAD_FAILED',
-  InferenceFailed = 'INFERENCE_FAILED',
-  InvalidInput = 'INVALID_INPUT',
-  MemoryError = 'MEMORY_ERROR',
-  ThermalThrottling = 'THERMAL_THROTTLING',
-  Timeout = 'TIMEOUT',
-  NotInitialized = 'NOT_INITIALIZED',
-  UnsupportedOperation = 'UNSUPPORTED_OPERATION',
+  ModelNotFound = "MODEL_NOT_FOUND",
+  ModelLoadFailed = "MODEL_LOAD_FAILED",
+  InferenceFailed = "INFERENCE_FAILED",
+  InvalidInput = "INVALID_INPUT",
+  MemoryError = "MEMORY_ERROR",
+  ThermalThrottling = "THERMAL_THROTTLING",
+  Timeout = "TIMEOUT",
+  NotInitialized = "NOT_INITIALIZED",
+  UnsupportedOperation = "UNSUPPORTED_OPERATION",
 }
