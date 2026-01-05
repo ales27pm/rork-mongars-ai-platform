@@ -25,7 +25,20 @@ export function useMicrophone() {
 
   const requestPermission = useCallback(async () => {
     if (Platform.OS === 'web') {
-      setPermissionStatus('granted');
+      if (navigator.permissions) {
+        try {
+          const perm = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+          if (perm.state === 'granted') {
+            setPermissionStatus('granted');
+            return true;
+          }
+          // If 'prompt', we'll ask when starting recording.
+          // If 'denied', getUserMedia will fail, which is handled in startRecording.
+        } catch (e) {
+          console.warn('[useMicrophone] Could not query microphone permission:', e);
+        }
+      }
+      // For web, permission is requested by getUserMedia, so we can proceed.
       return true;
     }
 
