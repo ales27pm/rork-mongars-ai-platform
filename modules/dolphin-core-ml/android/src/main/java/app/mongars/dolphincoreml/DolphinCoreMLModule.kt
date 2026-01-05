@@ -40,7 +40,7 @@ class DolphinCoreMLModule : Module() {
         "generation" to emptyMap<String, Any>(),
         "totalInferences" to 0,
         "lastOperationDuration" to 0,
-        "lastOperationType" to ""
+        "lastOperationType" to "unsupported_platform"
       )
     }
 
