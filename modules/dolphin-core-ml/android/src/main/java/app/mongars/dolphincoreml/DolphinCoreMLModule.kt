@@ -26,11 +26,11 @@ class DolphinCoreMLModule : Module() {
       )
     }
 
-    AsyncFunction("generateStream") { _: String, _: Map<String, Any?> ->
+    AsyncFunction("generateStream") { _: String, _: Map<String, Any?>? ->
       throw UnsupportedOperationException("NO_MODEL_LOADED: DolphinCoreML is unavailable on Android")
     }
 
-    AsyncFunction("encodeBatch") { _: List<String>, _: Map<String, Any?> ->
+    AsyncFunction("encodeBatch") { _: List<String>, _: Map<String, Any?>? ->
       throw UnsupportedOperationException("NO_MODEL_LOADED: DolphinCoreML is unavailable on Android")
     }
 
