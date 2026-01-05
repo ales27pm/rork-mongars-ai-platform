@@ -26,15 +26,21 @@ export default function ContactsScreen() {
     setContactSharingAllowed,
     requestPermission,
     refreshContacts,
-    findContactByName,
-  } = useContacts();
+    const [query, setQuery] = useState("");
+    const [debouncedQuery, setDebouncedQuery] = useState(query);
 
-  const [query, setQuery] = useState("");
+    useEffect(() => {
+      const handler = setTimeout(() => setDebouncedQuery(query), 300);
+      return () => clearTimeout(handler);
+    }, [query]);
 
-  const visibleContacts = useMemo(() => {
-    const trimmed = query.trim();
-    if (trimmed) {
-      return findContactByName(trimmed, 20);
+    const visibleContacts = useMemo(() => {
+      const trimmed = debouncedQuery.trim();
+      if (trimmed) {
+        return findContactByName(trimmed, 20);
+      }
+      return contacts.slice(0, 50);
+    }, [contacts, findContactByName, debouncedQuery]);
     }
     return contacts.slice(0, 50);
   }, [contacts, findContactByName, query]);
