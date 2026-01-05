@@ -36,6 +36,8 @@ export interface PerformanceMetrics {
     count: number;
   };
   totalInferences: number;
+  lastOperationDuration?: number;
+  lastOperationType?: string;
 }
 
 export interface DeviceInfo {
@@ -52,13 +54,16 @@ interface DolphinCoreMLNativeModule {
     success: boolean;
     metadata: any;
     deviceInfo: DeviceInfo;
+    error?: { code: string; message: string };
   }>;
   
   encodeBatch(texts: string[], options?: EncodingOptions): Promise<number[][]>;
   
   generateStream(prompt: string, params?: GenerationParameters): Promise<string>;
-  
+
   getMetrics(): Promise<PerformanceMetrics>;
+
+  unloadModel(): Promise<boolean>;
 }
 
 class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
@@ -136,8 +141,14 @@ class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
         p95: 65.1,
         count: 0
       },
-      totalInferences: 0
+      totalInferences: 0,
+      lastOperationDuration: 0,
+      lastOperationType: 'fallback'
     };
+  }
+
+  async unloadModel() {
+    return true;
   }
 }
 
@@ -177,6 +188,13 @@ export class DolphinCoreML {
     
     try {
       const result = await this.module.initialize(defaultConfig);
+
+      if (!result.success) {
+        this.initialized = false;
+        const errorMessage = result.error?.message || 'Failed to load DolphinCoreML model';
+        throw new Error(result.error?.code ? `${result.error.code}: ${errorMessage}` : errorMessage);
+      }
+
       this.initialized = result.success;
       return result;
     } catch (error) {
@@ -247,6 +265,17 @@ export class DolphinCoreML {
       return {
         totalInferences: 0
       };
+    }
+  }
+
+  async unloadModel() {
+    try {
+      await this.module.unloadModel();
+      this.initialized = false;
+      return true;
+    } catch (error) {
+      console.error('[DolphinCoreML] Failed to unload model:', error);
+      return false;
     }
   }
 }
