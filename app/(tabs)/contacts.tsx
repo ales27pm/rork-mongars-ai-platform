@@ -134,17 +134,17 @@ export default function ContactsScreen() {
       </View>
 
       <Text style={styles.statusText}>Permission: {permissionStatus}</Text>
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-      <TextInput
-        placeholder="Search by name (e.g., John)"
-        placeholderTextColor="#94a3b8"
-        value={query}
-        onChangeText={setQuery}
-        style={styles.search}
-        autoCapitalize="words"
-      />
-
+      renderItem={({ item }) => {
+        const primaryPhone = item.phoneNumbers?.[0];
+        const primaryEmail = item.emails?.[0];
+        return (
+          <View style={styles.contactRow}>
+            <Text style={styles.contactName}>{item.name}</Text>
+            {primaryPhone ? (
+              <Text style={styles.contactMeta}>{primaryPhone}</Text>
+            ) : null}
+            {primaryEmail ? (
+              <Text style={styles.contactMeta}>{primaryEmail}</Text>
       {loading && (
         <ActivityIndicator style={{ marginVertical: 12 }} color="#60a5fa" />
       )}
