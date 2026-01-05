@@ -265,9 +265,9 @@ public class DolphinCoreMLModule: Module {
 
     // Generation is not implemented yet; fail fast so callers can handle it.
     let error = NSError(domain: "DolphinCoreML", code: -3, userInfo: [
+      "code": "NOT_IMPLEMENTED",
       NSLocalizedDescriptionKey: "NOT_IMPLEMENTED"
     ])
-    sendEvent("onError", ["message": error.localizedDescription])
     throw error
   }
 
