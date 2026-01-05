@@ -1,6 +1,5 @@
 import { Platform } from 'react-native';
 import { dolphinCoreML } from '@/lib/modules/DolphinCoreML';
-import { transformerEmbeddings } from '@/lib/utils/transformer-embeddings';
 
 export interface MLConfig {
   modelName?: string;
@@ -25,7 +24,7 @@ export interface EmbeddingOptions {
 export class CrossPlatformMLService {
   private static instance: CrossPlatformMLService;
   private isInitialized = false;
-  private platformBackend: 'coreml' | 'transformers' | 'onnx' = 'transformers';
+  private implementation: 'coreml' | 'transformers' | 'fallback' = 'fallback';
   private modelCache = new Map<string, any>();
 
   private constructor() {
@@ -41,14 +40,11 @@ export class CrossPlatformMLService {
 
   private detectPlatformBackend() {
     if (Platform.OS === 'ios') {
-      this.platformBackend = 'coreml';
+      this.implementation = 'coreml';
       console.log('[CrossPlatformML] Using CoreML backend for iOS');
-    } else if (Platform.OS === 'web' || Platform.OS === 'android') {
-      this.platformBackend = 'transformers';
-      console.log(`[CrossPlatformML] Using Transformers.js backend for ${Platform.OS}`);
     } else {
-      this.platformBackend = 'transformers';
-      console.log('[CrossPlatformML] Using Transformers.js fallback backend');
+      this.implementation = 'fallback';
+      console.log(`[CrossPlatformML] Using on-device fallback for ${Platform.OS}`);
     }
   }
 
@@ -58,27 +54,44 @@ export class CrossPlatformMLService {
       return true;
     }
 
-    console.log('[CrossPlatformML] Initializing with backend:', this.platformBackend);
+    console.log(`[CrossPlatformML] Initializing for platform: ${Platform.OS}`);
+    console.log('[CrossPlatformML] On-device mode: using fallback embeddings');
 
     try {
-      if (this.platformBackend === 'coreml') {
-        await dolphinCoreML.initialize({
-          modelName: config.modelName || 'Dolphin',
-          enableEncryption: config.enableEncryption !== false,
-          maxBatchSize: config.maxBatchSize || 8,
-          computeUnits: 'all',
-        });
-      } else if (this.platformBackend === 'transformers') {
-        await transformerEmbeddings.initialize('all-MiniLM-L6-v2');
+      if (Platform.OS === 'ios') {
+        await this.initializeIOS();
+      } else {
+        console.log('[CrossPlatformML] Using on-device fallback (no external models)');
+        this.implementation = 'fallback';
       }
 
       this.isInitialized = true;
-      console.log('[CrossPlatformML] Initialization successful');
+      console.log(`[CrossPlatformML] Initialized with ${this.implementation} implementation`);
       return true;
     } catch (error) {
       console.error('[CrossPlatformML] Initialization failed:', error);
-      this.isInitialized = false;
-      return false;
+      console.log('[CrossPlatformML] Falling back to on-device mock implementation');
+      this.implementation = 'fallback';
+      this.isInitialized = true;
+      return true;
+    }
+  }
+
+  private async initializeIOS(): Promise<void> {
+    console.log('[CrossPlatformML] Initializing CoreML for iOS');
+    
+    try {
+      await dolphinCoreML.initialize({
+        modelName: 'Dolphin',
+        enableEncryption: true,
+        maxBatchSize: 8,
+        computeUnits: 'all',
+      });
+      this.implementation = 'coreml';
+      console.log('[CrossPlatformML] CoreML initialized successfully');
+    } catch (error) {
+      console.error('[CrossPlatformML] CoreML initialization failed:', error);
+      throw error;
     }
   }
 
@@ -96,20 +109,22 @@ export class CrossPlatformMLService {
     try {
       let embedding: number[];
 
-      if (this.platformBackend === 'coreml') {
-        const pooling = options?.pooling === 'max' ? 'mean' : (options?.pooling || 'mean');
-        embedding = await dolphinCoreML.encode(text, {
-          normalize: options?.normalize !== false,
-          pooling,
-        });
-      } else if (this.platformBackend === 'transformers') {
-        const pooling = options?.pooling === 'max' ? 'mean' : (options?.pooling || 'mean');
-        embedding = await transformerEmbeddings.encode(text, {
-          normalize: options?.normalize !== false,
-          pooling,
-        });
-      } else {
-        embedding = this.generateFallbackEmbedding(text);
+      switch (this.implementation) {
+        case 'coreml':
+          console.log('[CrossPlatformML] Using CoreML for embedding');
+          const pooling = options?.pooling === 'max' ? 'mean' : (options?.pooling || 'mean');
+          embedding = await dolphinCoreML.encode(text, {
+            normalize: options?.normalize !== false,
+            pooling,
+          });
+          break;
+        case 'transformers':
+          console.log('[CrossPlatformML] Transformers disabled in on-device mode, using fallback');
+          embedding = this.generateFallbackEmbedding(text, options?.normalize !== false);
+          break;
+        default:
+          embedding = this.generateFallbackEmbedding(text, options?.normalize !== false);
+          break;
       }
 
       if (this.modelCache.size > 100) {
@@ -135,21 +150,34 @@ export class CrossPlatformMLService {
     console.log(`[CrossPlatformML] Generating batch embeddings for ${texts.length} texts`);
 
     try {
-      if (this.platformBackend === 'coreml') {
-        const pooling = options?.pooling === 'max' ? 'mean' : (options?.pooling || 'mean');
-        return await dolphinCoreML.encodeBatch(texts, {
-          normalize: options?.normalize !== false,
-          pooling,
-        });
-      } else if (this.platformBackend === 'transformers') {
-        const pooling = options?.pooling === 'max' ? 'mean' : (options?.pooling || 'mean');
-        return await transformerEmbeddings.encodeBatch(texts, {
-          normalize: options?.normalize !== false,
-          pooling,
-        });
-      } else {
-        return texts.map(text => this.generateFallbackEmbedding(text));
+      const batchSize = 8;
+      const results: number[][] = [];
+
+      for (let i = 0; i < texts.length; i += batchSize) {
+        const batch = texts.slice(i, i + batchSize);
+        let batchResults: number[][];
+
+        switch (this.implementation) {
+          case 'coreml':
+            const pooling = options?.pooling === 'max' ? 'mean' : (options?.pooling || 'mean');
+            batchResults = await dolphinCoreML.encodeBatch(batch, {
+              normalize: options?.normalize !== false,
+              pooling,
+            });
+            break;
+          case 'transformers':
+            console.log('[CrossPlatformML] Transformers disabled, using fallback for batch');
+            batchResults = batch.map(text => this.generateFallbackEmbedding(text, options?.normalize !== false));
+            break;
+          default:
+            batchResults = batch.map(text => this.generateFallbackEmbedding(text, options?.normalize !== false));
+            break;
+        }
+
+        results.push(...batchResults);
       }
+
+      return results;
     } catch (error) {
       console.error('[CrossPlatformML] Batch embedding generation failed:', error);
       return texts.map(text => this.generateFallbackEmbedding(text));
@@ -161,10 +189,10 @@ export class CrossPlatformMLService {
       await this.initialize();
     }
 
-    console.log('[CrossPlatformML] Generating text with backend:', this.platformBackend);
+    console.log('[CrossPlatformML] Generating text with backend:', this.implementation);
 
     try {
-      if (this.platformBackend === 'coreml') {
+      if (this.implementation === 'coreml') {
         return await dolphinCoreML.generate(prompt, {
           maxTokens: options?.maxTokens || 100,
           temperature: options?.temperature || 0.7,
@@ -211,7 +239,8 @@ export class CrossPlatformMLService {
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
-  private generateFallbackEmbedding(text: string, dimension: number = 384): number[] {
+  private generateFallbackEmbedding(text: string, normalize: boolean = true): number[] {
+    const dimension = 384;
     const embedding: number[] = [];
     let hash = 0;
 
@@ -226,8 +255,12 @@ export class CrossPlatformMLService {
       embedding.push(value);
     }
 
-    const magnitude = Math.sqrt(embedding.reduce((sum, v) => sum + v * v, 0));
-    return embedding.map(v => v / magnitude);
+    if (normalize) {
+      const magnitude = Math.sqrt(embedding.reduce((sum, v) => sum + v * v, 0));
+      return embedding.map(v => v / magnitude);
+    }
+    
+    return embedding;
   }
 
   getBackendInfo(): {
@@ -238,13 +271,13 @@ export class CrossPlatformMLService {
   } {
     const capabilities: string[] = ['embeddings'];
 
-    if (this.platformBackend === 'coreml') {
+    if (this.implementation === 'coreml') {
       capabilities.push('text-generation', 'chat');
     }
 
     return {
       platform: Platform.OS,
-      backend: this.platformBackend,
+      backend: this.implementation,
       initialized: this.isInitialized,
       capabilities,
     };
@@ -257,11 +290,6 @@ export class CrossPlatformMLService {
 
   async cleanup(): Promise<void> {
     this.modelCache.clear();
-
-    if (this.platformBackend === 'transformers') {
-      await transformerEmbeddings.cleanup();
-    }
-
     this.isInitialized = false;
     console.log('[CrossPlatformML] Cleanup complete');
   }

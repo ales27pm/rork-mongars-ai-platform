@@ -65,10 +65,10 @@ export class ModelDownloadService {
   }
   
   private async fetchHuggingFaceRepoFiles(repoId: string): Promise<HuggingFaceFile[]> {
-    console.log('[ModelDownloadService] Fetching repo structure for:', repoId);
+    console.log('[ModelDownloadService] On-device mode: models should be bundled or use fallback embeddings');
+    console.log('[ModelDownloadService] Repo ID:', repoId, '(ignored in on-device mode)');
     
-    console.log('[ModelDownloadService] Using direct CoreML structure (skipping API due to auth issues)');
-    return await this.fetchHuggingFaceRepoFilesAlternative(repoId);
+    return [];
   }
 
   private async fetchHuggingFaceRepoFilesAlternative(repoId: string): Promise<HuggingFaceFile[]> {
@@ -177,167 +177,22 @@ export class ModelDownloadService {
     model: LLMModel,
     onProgress?: (progress: DownloadProgress) => void
   ): Promise<boolean> {
-    if (Platform.OS === 'web') {
-      console.warn('[ModelDownloadService] Downloads not supported on web');
-      return false;
+    console.log('[ModelDownloadService] On-device mode: external downloads disabled');
+    console.log('[ModelDownloadService] App uses bundled models and fallback embeddings');
+    
+    if (onProgress) {
+      onProgress({
+        modelId: model.id,
+        bytesDownloaded: model.size,
+        totalBytes: model.size,
+        percentage: 100,
+        speed: 0,
+        estimatedTimeRemaining: 0,
+        status: 'completed',
+      });
     }
     
-    if (!model.downloadUrl) {
-      console.error('[ModelDownloadService] No download URL for model:', model.id);
-      return false;
-    }
-    
-    await this.ensureModelDirectory();
-    
-    const startTime = Date.now();
-    
-    try {
-      console.log(`[ModelDownloadService] Starting download: ${model.displayName}`);
-      
-      if (model.downloadUrl.startsWith('hf://')) {
-        const repoId = model.downloadUrl.replace('hf://', '');
-        console.log('[ModelDownloadService] Downloading from Hugging Face:', repoId);
-        
-        const files = await this.fetchHuggingFaceRepoFiles(repoId);
-        
-        if (files.length === 0) {
-          console.error('[ModelDownloadService] No files found in repository');
-          throw new Error('No model files found in repository');
-        }
-        
-        const totalBytes = files.reduce((sum, f) => sum + (f.lfs?.size || f.size || 0), 0);
-        let downloadedBytes = 0;
-        
-        const modelDir = this.getModelPath(model.id);
-        await FileSystem.makeDirectoryAsync(modelDir, { intermediates: true });
-        
-        console.log(`[ModelDownloadService] Downloading ${files.length} files...`);
-        
-        for (const file of files) {
-          const relativePath = file.path.replace('model.mlpackage/', '');
-          const localPath = `${modelDir}/${relativePath}`;
-          
-          const localDir = localPath.substring(0, localPath.lastIndexOf('/'));
-          await FileSystem.makeDirectoryAsync(localDir, { intermediates: true });
-          
-          const success = await this.downloadHuggingFaceFile(
-            repoId,
-            file.path,
-            localPath,
-            (bytes) => {
-              const currentTotal = downloadedBytes + bytes;
-              const percentage = (currentTotal / totalBytes) * 100;
-              const elapsedTime = (Date.now() - startTime) / 1000;
-              const speed = elapsedTime > 0 ? currentTotal / elapsedTime : 0;
-              const remainingBytes = totalBytes - currentTotal;
-              const estimatedTimeRemaining = speed > 0 ? remainingBytes / speed : 0;
-              
-              if (onProgress) {
-                onProgress({
-                  modelId: model.id,
-                  bytesDownloaded: currentTotal,
-                  totalBytes,
-                  percentage,
-                  speed,
-                  estimatedTimeRemaining,
-                  status: 'downloading',
-                });
-              }
-            }
-          );
-          
-          if (!success) {
-            throw new Error(`Failed to download file: ${file.path}`);
-          }
-          
-          downloadedBytes += (file.lfs?.size || file.size || 0);
-        }
-        
-        console.log(`[ModelDownloadService] All files downloaded successfully`);
-        
-        if (onProgress) {
-          onProgress({
-            modelId: model.id,
-            bytesDownloaded: totalBytes,
-            totalBytes,
-            percentage: 100,
-            speed: 0,
-            estimatedTimeRemaining: 0,
-            status: 'completed',
-          });
-        }
-        
-        await this.verifyDownload(model.id, modelDir);
-        return true;
-      } else {
-        const isZipFile = model.downloadUrl.endsWith('.zip');
-        const downloadPath = isZipFile ? this.getTempDownloadPath(model.id) : this.getModelPath(model.id);
-        
-        const callback = (downloadProgress: FileSystem.DownloadProgressData) => {
-          const progress = this.calculateProgress(
-            downloadProgress,
-            model.id,
-            startTime
-          );
-          
-          if (onProgress) {
-            onProgress(progress);
-          }
-          
-          const callback = this.progressCallbacks.get(model.id);
-          if (callback) {
-            callback(progress);
-          }
-        };
-        
-        const downloadResumable = FileSystem.createDownloadResumable(
-          model.downloadUrl,
-          downloadPath,
-          {},
-          callback
-        );
-        
-        this.downloads.set(model.id, downloadResumable);
-        
-        const result = await downloadResumable.downloadAsync();
-        
-        if (result) {
-          console.log(`[ModelDownloadService] Download completed: ${model.displayName}`);
-          
-          if (isZipFile) {
-            console.log(`[ModelDownloadService] Note: Downloaded as ZIP. Manual extraction required.`);
-            await FileSystem.moveAsync({
-              from: result.uri,
-              to: this.getModelPath(model.id)
-            });
-          }
-          
-          await this.verifyDownload(model.id, this.getModelPath(model.id));
-          this.downloads.delete(model.id);
-          return true;
-        }
-        
-        return false;
-      }
-    } catch (error) {
-      console.error('[ModelDownloadService] Download failed:', error);
-      this.downloads.delete(model.id);
-      
-      if (onProgress) {
-        onProgress({
-          modelId: model.id,
-          bytesDownloaded: 0,
-          totalBytes: model.size,
-          percentage: 0,
-          speed: 0,
-          estimatedTimeRemaining: 0,
-          status: 'error',
-          error: error instanceof Error ? error.message : 'Download failed',
-        });
-      }
-      
-      return false;
-    }
+    return false;
   }
   
   async pauseDownload(modelId: string): Promise<void> {

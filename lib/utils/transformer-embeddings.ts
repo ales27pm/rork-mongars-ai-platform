@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+
 
 export interface TransformerModel {
   name: string;
@@ -55,18 +55,14 @@ export class TransformerEmbeddingService {
     this.isInitializing = true;
     this.modelConfig = MODELS[modelName];
 
-    console.log(`[TransformerEmbeddings] Initializing ${this.modelConfig.name}...`);
+    console.log(`[TransformerEmbeddings] On-device mode: using fallback embeddings`);
+    console.log('[TransformerEmbeddings] External model loading disabled');
 
     try {
-      if (Platform.OS === 'web' || Platform.OS === 'android') {
-        await this.initializeWeb();
-      } else {
-        console.warn('[TransformerEmbeddings] Platform not supported, using fallback');
-        this.isInitialized = true;
-      }
-
-      console.log('[TransformerEmbeddings] Initialization complete');
+      console.log('[TransformerEmbeddings] Using on-device fallback implementation');
       this.isInitialized = true;
+
+      console.log('[TransformerEmbeddings] Initialization complete (fallback mode)');
       return true;
     } catch (error) {
       console.error('[TransformerEmbeddings] Initialization failed:', error);
@@ -78,89 +74,17 @@ export class TransformerEmbeddingService {
   }
 
   private async initializeWeb(): Promise<void> {
-    try {
-      const transformers = await import('@xenova/transformers');
-      const { pipeline, env } = transformers;
-      
-      env.allowLocalModels = false;
-      env.allowRemoteModels = true;
-      
-      if (Platform.OS === 'web') {
-        env.backends.onnx.wasm.numThreads = 1;
-      }
-      
-      console.log('[TransformerEmbeddings] Loading pipeline for', this.modelConfig.name);
-      
-      this.pipeline = await pipeline(
-        'feature-extraction',
-        this.modelConfig.name,
-        { 
-          quantized: true,
-          revision: 'main',
-          progress_callback: (progress: any) => {
-            if (progress.status === 'progress' && progress.file) {
-              const percent = Math.round((progress.loaded / progress.total) * 100);
-              console.log(`[TransformerEmbeddings] Downloading ${progress.file}: ${percent}%`);
-            } else if (progress.status === 'done') {
-              console.log(`[TransformerEmbeddings] Downloaded ${progress.file}`);
-            }
-          }
-        }
-      );
-
-      console.log('[TransformerEmbeddings] Pipeline loaded successfully');
-      
-      const testEmbedding = await this.pipeline('test', { pooling: 'mean', normalize: true });
-      console.log('[TransformerEmbeddings] Test encoding successful, dimension:', testEmbedding.data.length);
-    } catch (error) {
-      console.error('[TransformerEmbeddings] Web initialization failed:', error);
-      throw error;
-    }
+    console.log('[TransformerEmbeddings] On-device mode: external model loading disabled');
+    console.log('[TransformerEmbeddings] Using deterministic fallback embeddings');
   }
 
   async encode(text: string, options?: { normalize?: boolean; pooling?: 'mean' | 'cls' }): Promise<number[]> {
     if (!this.isInitialized) {
-      console.warn('[TransformerEmbeddings] Not initialized, initializing now...');
-      const success = await this.initialize();
-      if (!success) {
-        console.warn('[TransformerEmbeddings] Initialization failed, using fallback');
-        return this.generateFallbackEmbedding(text);
-      }
+      await this.initialize();
     }
 
-    if ((Platform.OS !== 'web' && Platform.OS !== 'android') || !this.pipeline) {
-      return this.generateFallbackEmbedding(text);
-    }
-
-    try {
-      const startTime = Date.now();
-      
-      const maxLength = this.modelConfig.maxLength;
-      const truncatedText = text.length > maxLength ? text.substring(0, maxLength) : text;
-      
-      const output = await this.pipeline(truncatedText, {
-        pooling: options?.pooling || 'mean',
-        normalize: options?.normalize !== false,
-      });
-
-      let embedding: number[];
-      if (output.data) {
-        embedding = Array.from(output.data) as number[];
-      } else if (Array.isArray(output)) {
-        embedding = output as number[];
-      } else {
-        throw new Error('Unexpected output format from pipeline');
-      }
-
-      const duration = Date.now() - startTime;
-
-      console.log(`[TransformerEmbeddings] Encoded text (${truncatedText.length} chars) in ${duration}ms, dim: ${embedding.length}`);
-
-      return embedding;
-    } catch (error) {
-      console.error('[TransformerEmbeddings] Encoding failed:', error);
-      return this.generateFallbackEmbedding(text);
-    }
+    console.log('[TransformerEmbeddings] Using on-device fallback embedding');
+    return this.generateFallbackEmbedding(text);
   }
 
   async encodeBatch(
@@ -168,44 +92,11 @@ export class TransformerEmbeddingService {
     options?: { normalize?: boolean; pooling?: 'mean' | 'cls'; batchSize?: number }
   ): Promise<number[][]> {
     if (!this.isInitialized) {
-      console.warn('[TransformerEmbeddings] Not initialized, initializing now...');
-      const success = await this.initialize();
-      if (!success) {
-        throw new Error('Failed to initialize transformer embeddings');
-      }
+      await this.initialize();
     }
 
-    if ((Platform.OS !== 'web' && Platform.OS !== 'android') || !this.pipeline) {
-      return texts.map(text => this.generateFallbackEmbedding(text));
-    }
-
-    const batchSize = options?.batchSize || 8;
-    const results: number[][] = [];
-
-    console.log(`[TransformerEmbeddings] Encoding batch of ${texts.length} texts`);
-    const startTime = Date.now();
-
-    for (let i = 0; i < texts.length; i += batchSize) {
-      const batch = texts.slice(i, i + batchSize);
-      
-      try {
-        const batchResults = await Promise.all(
-          batch.map(text => this.encode(text, options))
-        );
-        
-        results.push(...batchResults);
-      } catch (error) {
-        console.error(`[TransformerEmbeddings] Batch ${i / batchSize + 1} failed:`, error);
-        results.push(...batch.map(text => this.generateFallbackEmbedding(text)));
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 10));
-    }
-
-    const duration = Date.now() - startTime;
-    console.log(`[TransformerEmbeddings] Batch encoding completed in ${duration}ms (${(duration / texts.length).toFixed(2)}ms per text)`);
-
-    return results;
+    console.log(`[TransformerEmbeddings] Encoding batch of ${texts.length} texts (on-device fallback)`);
+    return texts.map(text => this.generateFallbackEmbedding(text));
   }
 
   private generateFallbackEmbedding(text: string): number[] {

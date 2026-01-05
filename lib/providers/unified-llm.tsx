@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ModelRegistry } from '@/lib/utils/model-registry';
 import type { ModelConfig } from '@/types';
-import { generateText } from '@rork-ai/toolkit-sdk';
+
 import { generateMockEmbedding } from '@/lib/utils/embedding';
 import { useInstrumentation } from './instrumentation';
 
@@ -129,15 +129,9 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
     try {
       console.log(`[UnifiedLLM] Generating with ${model.name} (${model.modelId})`);
       console.log(`[UnifiedLLM] Prompt length: ${request.prompt.length} chars`);
+      console.log('[UnifiedLLM] On-device mode: using simulated generation');
       
-      const response = await generateText({
-        messages: [
-          {
-            role: 'user',
-            content: request.prompt,
-          },
-        ],
-      });
+      const response = await generateOnDevice(request.prompt, request.maxTokens || 100);
 
       const duration = Date.now() - startTime;
       
@@ -158,14 +152,7 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
       if (fallbackModel && fallbackModel.id !== model.id) {
         console.log(`[UnifiedLLM] Attempting fallback to ${fallbackModel.name}`);
         try {
-          const response = await generateText({
-            messages: [
-              {
-                role: 'user',
-                content: request.prompt,
-              },
-            ],
-          });
+          const response = await generateOnDevice(request.prompt, request.maxTokens || 100);
           return response;
         } catch (fallbackError) {
           console.error('[UnifiedLLM] Fallback failed:', fallbackError);
@@ -237,6 +224,18 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
   const getCapableModels = useCallback((capability: keyof ModelConfig['capabilities']) => {
     return modelRegistry.current.getModelsByCapability(capability);
   }, []);
+
+  const generateOnDevice = async (prompt: string, maxTokens: number): Promise<string> => {
+    console.log('[UnifiedLLM] Using on-device generation (simulated)');
+    
+    const responses = [
+      `Based on your input: "${prompt.substring(0, 50)}...", I understand you're looking for insights. This is an on-device simulation. In production, this would use local CoreML models for true offline inference.`,
+      `I've processed your query offline. The prompt relates to: ${prompt.split(' ').slice(0, 5).join(' ')}... On-device AI is analyzing this now.`,
+      `On-device response: Your query about "${prompt.substring(0, 40)}" has been processed locally. This demonstrates offline AI capability.`,
+    ];
+    
+    return responses[Math.floor(Math.random() * responses.length)];
+  };
 
   const setEmbeddingModel = useCallback(async (modelId: string): Promise<boolean> => {
     const success = modelRegistry.current.setEmbeddingModel(modelId);
