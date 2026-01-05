@@ -31,8 +31,9 @@ interface EmbeddingRequest {
 }
 
 const countTokensForModel = (model: ModelConfig, text: string): number => {
-  if (model.tokenizer?.countTokens) {
-    return model.tokenizer.countTokens(text);
+  const countTokensFn = model.tokenizer?.countTokens;
+  if (typeof countTokensFn === 'function') {
+    return countTokensFn(text);
   }
 
   const estimatedTokens = Math.max(Math.ceil(text.length / 4), 1);
