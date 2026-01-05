@@ -5,6 +5,7 @@ import { ModelRegistry } from '@/lib/utils/model-registry';
 import type { ModelConfig } from '@/types';
 
 import { generateMockEmbedding } from '@/lib/utils/embedding';
+import { countTokens } from '@/lib/utils/tokenizer';
 import { useInstrumentation } from './instrumentation';
 
 const STORAGE_KEY = 'mongars_llm_config';
@@ -122,16 +123,31 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
       throw new Error('No active model configured');
     }
 
+    const promptTokens = countTokens(request.prompt);
+    const maxTokens = request.maxTokens ?? 100;
+    const totalRequestedTokens = promptTokens + maxTokens;
+
+    if (totalRequestedTokens > model.contextWindow) {
+      const available = Math.max(model.contextWindow - promptTokens, 0);
+      const errorMessage = `[UnifiedLLM] Token budget exceeded: prompt=${promptTokens}, requested=${maxTokens}, context=${model.contextWindow}`;
+      console.warn(errorMessage);
+      throw new Error(
+        `Prompt exceeds context window for ${model.name}. Available completion tokens: ${available}`,
+      );
+    }
+
     const endOp = instrumentation.startOperation('unified-llm', 'generate', { modelId: model.modelId });
     inferenceInProgress.current = true;
     const startTime = Date.now();
 
     try {
       console.log(`[UnifiedLLM] Generating with ${model.name} (${model.modelId})`);
-      console.log(`[UnifiedLLM] Prompt length: ${request.prompt.length} chars`);
+      console.log(
+        `[UnifiedLLM] Prompt length: ${request.prompt.length} chars (${promptTokens} tokens, max ${model.contextWindow})`,
+      );
       console.log('[UnifiedLLM] On-device mode: using simulated generation');
-      
-      const response = await generateOnDevice(request.prompt, request.maxTokens || 100);
+
+      const response = await generateOnDevice(request.prompt, maxTokens);
 
       const duration = Date.now() - startTime;
       
