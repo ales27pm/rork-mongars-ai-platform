@@ -138,11 +138,12 @@ public class DolphinCoreMLModule: Module {
           ]
         } catch {
           self.log.error("Failed to load model: \(error.localizedDescription)")
+          let nsError = error as NSError
           return [
             "success": false,
             "error": [
-              "code": (error as NSError).domain,
-              "message": error.localizedDescription
+              "code": String(nsError.code),
+              "message": nsError.localizedDescription
             ],
             "metadata": [
               "modelName": modelName
