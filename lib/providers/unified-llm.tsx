@@ -5,7 +5,6 @@ import { ModelRegistry } from '@/lib/utils/model-registry';
 import type { ModelConfig } from '@/types';
 
 import { generateMockEmbedding } from '@/lib/utils/embedding';
-import { countTokens } from '@/lib/utils/tokenizer';
 import { useInstrumentation } from './instrumentation';
 
 const STORAGE_KEY = 'mongars_llm_config';
@@ -30,6 +29,18 @@ interface EmbeddingRequest {
   text: string;
   normalize?: boolean;
 }
+
+const countTokensForModel = (model: ModelConfig, text: string): number => {
+  if (model.tokenizer?.countTokens) {
+    return model.tokenizer.countTokens(text);
+  }
+
+  const estimatedTokens = Math.max(Math.ceil(text.length / 4), 1);
+  console.warn(
+    `[UnifiedLLM] No tokenizer configured for ${model.name}; using heuristic estimate: ${estimatedTokens} tokens`,
+  );
+  return estimatedTokens;
+};
 
 export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
   const instrumentation = useInstrumentation();
@@ -123,7 +134,7 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
       throw new Error('No active model configured');
     }
 
-    const promptTokens = countTokens(request.prompt);
+    const promptTokens = countTokensForModel(model, request.prompt);
     const maxTokens = request.maxTokens ?? 100;
     const totalRequestedTokens = promptTokens + maxTokens;
 

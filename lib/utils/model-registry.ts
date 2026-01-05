@@ -1,4 +1,16 @@
-import type { ModelConfig, UnifiedLLMConfig } from '@/types';
+import type { ModelConfig, ModelTokenizer, UnifiedLLMConfig } from '@/types';
+
+import { countTokens, decodeTokens, encodeText } from '@/lib/utils/tokenizer';
+
+const buildLlamaTokenizer = (): ModelTokenizer => ({
+  countTokens,
+  encodeText,
+  decodeTokens,
+});
+
+const buildHeuristicTokenizer = (charsPerToken = 4): ModelTokenizer => ({
+  countTokens: (text: string) => Math.max(Math.ceil(text.length / charsPerToken), 1),
+});
 
 export const MODEL_REGISTRY: ModelConfig[] = [
   {
@@ -17,6 +29,7 @@ export const MODEL_REGISTRY: ModelConfig[] = [
     },
     vramRequirement: 2.5,
     description: 'Dolphin 3.0 fine-tuned on Llama 3.2 3B with 4-bit quantization. Uncensored, highly capable reasoning model optimized for resource-constrained environments.',
+    tokenizer: buildLlamaTokenizer(),
   },
   {
     id: 'dolphin-llama-3.2-3b-fp16',
@@ -34,6 +47,7 @@ export const MODEL_REGISTRY: ModelConfig[] = [
     },
     vramRequirement: 6.0,
     description: 'Full precision Dolphin 3.0 model with enhanced reasoning capabilities. Requires more VRAM but provides better quality.',
+    tokenizer: buildLlamaTokenizer(),
   },
   {
     id: 'gpt-4o-mini',
@@ -50,6 +64,7 @@ export const MODEL_REGISTRY: ModelConfig[] = [
     },
     vramRequirement: 0,
     description: 'OpenAI GPT-4o Mini - cloud-based model with multimodal capabilities.',
+    tokenizer: buildHeuristicTokenizer(3),
   },
   {
     id: 'claude-3.5-haiku',
@@ -66,6 +81,7 @@ export const MODEL_REGISTRY: ModelConfig[] = [
     },
     vramRequirement: 0,
     description: 'Anthropic Claude 3.5 Haiku - fast, affordable, and highly intelligent.',
+    tokenizer: buildHeuristicTokenizer(3),
   },
 ];
 
@@ -77,7 +93,11 @@ export const DEFAULT_LLM_CONFIG: UnifiedLLMConfig = {
 };
 
 export class ModelRegistry {
-  private config: UnifiedLLMConfig = DEFAULT_LLM_CONFIG;
+  private config: UnifiedLLMConfig;
+
+  constructor() {
+    this.config = this.hydrateConfig(DEFAULT_LLM_CONFIG);
+  }
 
   getActiveModel(): ModelConfig | null {
     return this.config.models.find(m => m.id === this.config.activeModelId) || null;
@@ -171,7 +191,7 @@ export class ModelRegistry {
   }
 
   importConfig(config: UnifiedLLMConfig): void {
-    this.config = config;
+    this.config = this.hydrateConfig(config);
     console.log(`[ModelRegistry] Imported config with ${config.models.length} models`);
   }
 
@@ -190,5 +210,19 @@ export class ModelRegistry {
       cloudModels: this.getCloudModels().length,
       totalVRAMRequired: this.getTotalVRAMRequired(),
     };
+  }
+
+  private hydrateConfig(config: UnifiedLLMConfig): UnifiedLLMConfig {
+    const hydratedModels = config.models.map(model => {
+      const registryModel = MODEL_REGISTRY.find(m => m.id === model.id);
+
+      if (registryModel?.tokenizer) {
+        return { ...model, tokenizer: registryModel.tokenizer };
+      }
+
+      return model;
+    });
+
+    return { ...config, models: hydratedModels };
   }
 }
