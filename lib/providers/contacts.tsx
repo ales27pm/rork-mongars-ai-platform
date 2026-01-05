@@ -77,8 +77,9 @@ export const [ContactsProvider, useContacts] =
       }
 
       try {
-        const { status } = await Contacts.requestPermissionsAsync();
-        const granted =
+      setPermissionStatus(granted ? "granted" : "denied");
+      if (granted) setError(null);
+      return granted;
           status === Contacts.PermissionStatus.GRANTED || status === "granted";
         setPermissionStatus(granted ? "granted" : "denied");
         return granted;
