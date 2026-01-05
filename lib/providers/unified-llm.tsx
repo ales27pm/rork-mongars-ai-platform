@@ -18,6 +18,7 @@ import {
 import { useInstrumentation } from "./instrumentation";
 
 const STORAGE_KEY = "mongars_llm_config";
+const CACHE_STORAGE_KEY = "mongars_llm_cache";
 const CACHE_LIMIT = 20;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -37,12 +38,12 @@ const buildCacheKey = (prefix: string, payload: string): string => {
 const getCachedEntry = (
   cacheRef: MutableRefObject<Map<string, ModelCacheEntry>>,
   key: string,
-): ModelCacheEntry | null => {
+): { entry: ModelCacheEntry | null; mutated: boolean } => {
   const entry = cacheRef.current.get(key);
-  if (!entry) return null;
+  if (!entry) return { entry: null, mutated: false };
   if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
     cacheRef.current.delete(key);
-    return null;
+    return { entry: null, mutated: true };
   }
 
   const updated: ModelCacheEntry = {
@@ -52,14 +53,14 @@ const getCachedEntry = (
   };
   cacheRef.current.delete(key);
   cacheRef.current.set(key, updated);
-  return updated;
+  return { entry: updated, mutated: true };
 };
 
 const setCachedEntry = (
   cacheRef: MutableRefObject<Map<string, ModelCacheEntry>>,
   key: string,
   result: string | number[],
-): void => {
+): ModelCacheEntry => {
   if (cacheRef.current.size >= CACHE_LIMIT) {
     const oldestKey = cacheRef.current.keys().next().value;
     if (oldestKey) {
@@ -68,13 +69,15 @@ const setCachedEntry = (
   }
 
   const size = typeof result === "string" ? result.length : result.length * 8;
-  cacheRef.current.set(key, {
+  const entry: ModelCacheEntry = {
     key,
     result,
     timestamp: Date.now(),
     hits: 0,
     size,
-  });
+  };
+  cacheRef.current.set(key, entry);
+  return entry;
 };
 
 interface LLMMetrics {
@@ -130,6 +133,82 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
   const inferenceInProgress = useRef(false);
   const embeddingInProgress = useRef(false);
 
+  const pruneCache = useCallback(
+    (cacheRef: MutableRefObject<Map<string, ModelCacheEntry>>): void => {
+      const now = Date.now();
+      for (const [key, entry] of cacheRef.current.entries()) {
+        if (now - entry.timestamp > CACHE_TTL_MS) {
+          cacheRef.current.delete(key);
+        }
+      }
+    },
+    [],
+  );
+
+  const saveCache = useCallback(async () => {
+    try {
+      pruneCache(generationCache);
+      pruneCache(embeddingCache);
+
+      const now = Date.now();
+      const serialize = (
+        cacheRef: MutableRefObject<Map<string, ModelCacheEntry>>,
+      ) =>
+        Array.from(cacheRef.current.values())
+          .filter((entry) => now - entry.timestamp <= CACHE_TTL_MS)
+          .slice(-CACHE_LIMIT);
+
+      const payload = {
+        generation: serialize(generationCache),
+        embedding: serialize(embeddingCache),
+      };
+
+      await AsyncStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(payload));
+      console.log(
+        `[UnifiedLLM] Cache saved (${payload.generation.length} generations, ${payload.embedding.length} embeddings)`,
+      );
+    } catch (error) {
+      console.error("[UnifiedLLM] Cache save error:", error);
+    }
+  }, [pruneCache]);
+
+  const loadCache = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem(CACHE_STORAGE_KEY);
+      if (!stored) return;
+
+      const parsed = JSON.parse(stored) as {
+        generation?: ModelCacheEntry[];
+        embedding?: ModelCacheEntry[];
+      };
+      const now = Date.now();
+      const hydrate = (entries?: ModelCacheEntry[]) => {
+        if (!Array.isArray(entries)) return [] as ModelCacheEntry[];
+        return entries
+          .filter((entry) => now - entry.timestamp <= CACHE_TTL_MS)
+          .slice(-CACHE_LIMIT)
+          .sort((a, b) => a.timestamp - b.timestamp);
+      };
+
+      const hydratedGeneration = hydrate(parsed.generation);
+      const hydratedEmbedding = hydrate(parsed.embedding);
+
+      generationCache.current = new Map(
+        hydratedGeneration.map((entry) => [entry.key, entry]),
+      );
+      embeddingCache.current = new Map(
+        hydratedEmbedding.map((entry) => [entry.key, entry]),
+      );
+
+      console.log(
+        `[UnifiedLLM] Loaded cache (${hydratedGeneration.length} generations, ${hydratedEmbedding.length} embeddings)`,
+      );
+    } catch (error) {
+      console.error("[UnifiedLLM] Cache load error:", error);
+      await AsyncStorage.removeItem(CACHE_STORAGE_KEY);
+    }
+  }, []);
+
   const loadConfig = useCallback(async () => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
@@ -172,7 +251,8 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
 
   useEffect(() => {
     loadConfig();
-  }, [loadConfig]);
+    loadCache();
+  }, [loadCache, loadConfig]);
 
   const switchModel = useCallback(
     async (modelId: string): Promise<boolean> => {
@@ -235,7 +315,13 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
         `${model.modelId}:${request.prompt}:${maxTokens}`,
       );
       if (!request.streaming) {
-        const cached = getCachedEntry(generationCache, cacheKey);
+        const { entry: cached, mutated } = getCachedEntry(
+          generationCache,
+          cacheKey,
+        );
+        if (mutated) {
+          void saveCache();
+        }
         if (cached && typeof cached.result === "string") {
           console.log(`[UnifiedLLM] Cache hit for generation (${cacheKey})`);
           setMetrics((prev) => ({
@@ -281,6 +367,7 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
 
         if (!request.streaming) {
           setCachedEntry(generationCache, cacheKey, response);
+          await saveCache();
         }
 
         return response;
@@ -310,7 +397,7 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
         endOp();
       }
     },
-    [instrumentation],
+    [instrumentation, saveCache],
   );
 
   const embed = useCallback(
@@ -330,7 +417,13 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
         "embed",
         `${model.modelId}:${request.text}:${request.normalize ?? true}`,
       );
-      const cached = getCachedEntry(embeddingCache, cacheKey);
+      const { entry: cached, mutated } = getCachedEntry(
+        embeddingCache,
+        cacheKey,
+      );
+      if (mutated) {
+        void saveCache();
+      }
       if (cached && Array.isArray(cached.result)) {
         console.log(`[UnifiedLLM] Embedding cache hit (${cacheKey})`);
         setMetrics((prev) => ({
@@ -364,6 +457,7 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
         }));
 
         setCachedEntry(embeddingCache, cacheKey, embedding);
+        await saveCache();
 
         console.log(
           `[UnifiedLLM] Generated embedding (${embedding.length}D) in ${duration}ms`,
@@ -378,7 +472,7 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
         endOp();
       }
     },
-    [instrumentation],
+    [instrumentation, saveCache],
   );
 
   const getModelInfo = useCallback(() => {

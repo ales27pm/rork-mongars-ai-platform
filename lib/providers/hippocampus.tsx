@@ -152,27 +152,26 @@ export const [HippocampusProvider, useHippocampus] = createContextHook(() => {
     [computeEmbedding],
   );
 
+  useEffect(() => {
+    if (shortTermMemory.length > SHORT_TERM_MAX) {
+      const overflowCount = shortTermMemory.length - SHORT_TERM_MAX;
+      const overflow = shortTermMemory.slice(0, overflowCount);
+      const trimmed = shortTermMemory.slice(overflowCount);
+
+      setShortTermMemory(trimmed);
+      if (overflow.length > 0) {
+        void consolidateToLongTerm(overflow);
+      }
+    }
+  }, [consolidateToLongTerm, shortTermMemory]);
+
   const storeMessage = useCallback(
     async (message: Message) => {
       const endOp = instrumentation.startOperation("memory", "store-message", {
         role: message.role,
       });
 
-      let overflow: Message[] = [];
-
-      setShortTermMemory((prev) => {
-        const updated = [...prev, message];
-        if (updated.length > SHORT_TERM_MAX) {
-          const overflowCount = updated.length - SHORT_TERM_MAX;
-          overflow = updated.slice(0, overflowCount);
-          return updated.slice(-SHORT_TERM_MAX);
-        }
-        return updated;
-      });
-
-      if (overflow.length > 0) {
-        await consolidateToLongTerm(overflow);
-      }
+      setShortTermMemory((prev) => [...prev, message]);
 
       if (
         message.role === "assistant" &&
