@@ -18,11 +18,10 @@
       "usesAppleSignin": true,
       "bundleIdentifier": "app.27pm.mongars",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "audio"
-        ],
+        "UIBackgroundModes": ["audio"],
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to record audio for voice questions and commands.",
-        "NSFaceIDUsageDescription": "Allow $(PRODUCT_NAME) to access your Face ID biometric data."
+        "NSFaceIDUsageDescription": "Allow $(PRODUCT_NAME) to access your Face ID biometric data.",
+        "NSContactsUsageDescription": "Allow access to contacts to enable AI assistant to find people in your address book."
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -39,7 +38,8 @@
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
-        "INTERNET"
+        "INTERNET",
+        "READ_CONTACTS"
       ]
     },
     "web": {
