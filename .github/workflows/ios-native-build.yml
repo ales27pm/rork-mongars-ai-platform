@@ -12,6 +12,7 @@ env:
   EXPO_NO_TELEMETRY: "1"
   EXPO_DO_NOT_TRACK: "1"
   EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+  EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
   IOS_CONFIGURATION: "Release"
   DERIVED_DATA_PATH: "ios/build"
 
@@ -35,6 +36,18 @@ jobs:
 
       - name: "🛠️ Install EAS CLI"
         run: npm install -g eas-cli
+
+      - name: "🔗 Configure EAS project"
+        env:
+          EXPO_TOKEN: ${{ env.EXPO_TOKEN }}
+          EAS_PROJECT_ID: ${{ env.EAS_PROJECT_ID }}
+        run: |
+          if [ -z "$EAS_PROJECT_ID" ]; then
+            echo "EAS_PROJECT_ID secret is required to configure the project for non-interactive builds." >&2
+            exit 1
+          fi
+
+          eas init --id "$EAS_PROJECT_ID" --non-interactive --force
 
       - name: "👤 Verify Expo authentication"
         env:
