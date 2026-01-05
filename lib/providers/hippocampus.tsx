@@ -244,16 +244,13 @@ export const [HippocampusProvider, useHippocampus] = createContextHook(() => {
 
         if (results.length === 0) return [];
 
-        results.forEach((s) => {
+
+          const resultIds = new Set(results.map((r) => r.entry.id));
           setLongTermMemory((prev) =>
             prev.map((m) =>
-              m.id === s.entry.id
-                ? { ...m, accessCount: m.accessCount + 1 }
-                : m,
+              resultIds.has(m.id) ? { ...m, accessCount: m.accessCount + 1 } : m,
             ),
           );
-        });
-
         console.log(
           `[Hippocampus] Vector search: ${results.length} results, top score: ${results[0]?.score.toFixed(3)} (semantic: ${results[0]?.semanticScore.toFixed(3)})`,
         );
