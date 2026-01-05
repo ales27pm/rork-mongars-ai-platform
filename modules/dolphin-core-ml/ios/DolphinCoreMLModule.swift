@@ -70,15 +70,21 @@ actor DolphinCoreMLState {
   }
 
   func recordGeneration(duration: TimeInterval) {
-    generationDurations.append(duration)
-    totalInferences += 1
-    lastOperationDuration = duration
-    lastOperationType = "generation"
-  }
+      generationDurations.append(duration)
+      if generationDurations.count > 1000 {
+        generationDurations.removeFirst(generationDurations.count - 1000)
+      }
+      totalInferences += 1
+      lastOperationDuration = duration
+      lastOperationType = "generation"
+    }
 
-  func recordEncoding(duration: TimeInterval) {
-    encodingDurations.append(duration)
-    totalInferences += 1
+    func recordEncoding(duration: TimeInterval) {
+      encodingDurations.append(duration)
+      if encodingDurations.count > 1000 {
+        encodingDurations.removeFirst(encodingDurations.count - 1000)
+      }
+      totalInferences += 1
     lastOperationDuration = duration
     lastOperationType = "encoding"
   }
