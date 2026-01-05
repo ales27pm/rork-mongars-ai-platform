@@ -270,9 +270,11 @@ export class DolphinCoreML {
 
   async unloadModel() {
     try {
-      await this.module.unloadModel();
-      this.initialized = false;
-      return true;
+      const ok = await this.module.unloadModel();
+      if (ok) {
+        this.initialized = false;
+      }
+      return ok;
     } catch (error) {
       console.error('[DolphinCoreML] Failed to unload model:', error);
       return false;
