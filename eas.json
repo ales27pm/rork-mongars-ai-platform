@@ -1,0 +1,19 @@
+{
+  "cli": {
+    "version": ">= 7.0.0"
+  },
+  "build": {
+    "production": {
+      "workflow": "managed",
+      "distribution": "store",
+      "ios": {
+        "simulator": false,
+        "credentialsSource": "remote"
+      },
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

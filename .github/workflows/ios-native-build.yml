@@ -1,0 +1,65 @@
+name: "🎨 iOS Native Build"
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: "20"
+  EXPO_NO_TELEMETRY: "1"
+  EXPO_DO_NOT_TRACK: "1"
+  EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+  IOS_CONFIGURATION: "Release"
+  DERIVED_DATA_PATH: "ios/build"
+
+jobs:
+  build-ios:
+    name: "🎨 Build iOS Native Components"
+    runs-on: macos-latest
+
+    steps:
+      - name: "📥 Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "🛡️ Set up Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: "🤜 Install dependencies"
+        run: npm ci --legacy-peer-deps
+
+      - name: "🛠️ Install EAS CLI"
+        run: npm install -g eas-cli
+
+      - name: "👤 Verify Expo authentication"
+        env:
+          EXPO_TOKEN: ${{ env.EXPO_TOKEN }}
+        run: eas whoami
+
+      - name: "📈 Build iOS release artifacts with EAS"
+        env:
+          EXPO_TOKEN: ${{ env.EXPO_TOKEN }}
+        run: |
+          eas build \
+            --platform ios \
+            --profile production \
+            --non-interactive \
+            --wait \
+            --message "CI signed build"
+
+      - name: "🗂️ Prepare artifacts"
+        run: |
+          mkdir -p artifacts/ios
+          eas build:download --platform ios --latest --output artifacts/ios
+
+      - name: "📤 Upload iOS build artifacts"
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-native-build
+          path: artifacts/ios
+          if-no-files-found: error
