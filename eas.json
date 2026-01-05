@@ -4,7 +4,6 @@
   },
   "build": {
     "production": {
-      "workflow": "managed",
       "distribution": "store",
       "ios": {
         "simulator": false,
