@@ -6,6 +6,7 @@ import {
   FlatList,
   Platform,
   SafeAreaView,
+  Switch,
   StyleSheet,
   Text,
   TextInput,
@@ -21,6 +22,8 @@ export default function ContactsScreen() {
     permissionStatus,
     loading,
     error,
+    contactSharingAllowed,
+    setContactSharingAllowed,
     requestPermission,
     refreshContacts,
     findContactByName,
@@ -81,10 +84,25 @@ export default function ContactsScreen() {
           <Text style={styles.introTitle}>On-device address book</Text>
         </View>
         <Text style={styles.introText}>
-          Grant access to let the assistant find names. Matching contact details
-          you ask the assistant about will be sent to the AI model provider;
-          nothing is uploaded otherwise.
+          Grant access to let the assistant find names. When you enable
+          contact-sharing below and ask about a match, those details are sent to
+          the AI model provider; nothing is uploaded otherwise.
         </Text>
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.toggleTitle}>Share matches with AI model</Text>
+            <Text style={styles.toggleDescription}>
+              Required for the assistant to answer questions about your
+              contacts. You can switch this off anytime.
+            </Text>
+          </View>
+          <Switch
+            value={contactSharingAllowed}
+            onValueChange={setContactSharingAllowed}
+            trackColor={{ false: "#475569", true: "#3b82f6" }}
+            thumbColor="#e2e8f0"
+          />
+        </View>
       </View>
 
       <View style={styles.controls}>
@@ -203,6 +221,21 @@ const styles = StyleSheet.create({
   introText: {
     color: "#94a3b8",
     lineHeight: 20,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 12,
+  },
+  toggleTitle: {
+    color: "#e2e8f0",
+    fontWeight: "700",
+  },
+  toggleDescription: {
+    color: "#94a3b8",
+    marginTop: 4,
+    lineHeight: 18,
   },
   controls: {
     flexDirection: "row",

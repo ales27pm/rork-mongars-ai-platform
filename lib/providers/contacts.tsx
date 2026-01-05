@@ -12,6 +12,8 @@ interface ContactsContextValue {
   permissionStatus: "unknown" | "granted" | "denied" | "unavailable";
   loading: boolean;
   error: string | null;
+  contactSharingAllowed: boolean;
+  setContactSharingAllowed: (allowed: boolean) => void;
   requestPermission: () => Promise<boolean>;
   refreshContacts: () => Promise<DeviceContact[]>;
   findContactByName: (query: string, limit?: number) => DeviceContact[];
@@ -56,6 +58,7 @@ export const [ContactsProvider, useContacts] =
     >("unknown");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [contactSharingAllowed, setContactSharingAllowed] = useState(false);
 
     const requestPermission = useCallback(async () => {
       if (Platform.OS === "web") {
@@ -170,7 +173,7 @@ export const [ContactsProvider, useContacts] =
       (): ContactsContextValue["contactsTool"] => ({
         name: "contacts_search",
         description:
-          "Searches device contacts by name and returns details to the calling AI model",
+          "Searches device contacts by name and returns details to the calling AI model when sharing is enabled",
         parameters: {
           type: "object",
           properties: {
@@ -192,6 +195,13 @@ export const [ContactsProvider, useContacts] =
             return { results: [], error: "Contacts are not available on web" };
           }
 
+          if (!contactSharingAllowed) {
+            return {
+              results: [],
+              error: "Contact sharing with the AI model is disabled by the user",
+            };
+          }
+
           const granted =
             permissionStatus === "granted" || (await requestPermission());
           if (!granted) {
@@ -209,6 +219,7 @@ export const [ContactsProvider, useContacts] =
       [
         contacts.length,
         findContactByName,
+        contactSharingAllowed,
         loading,
         permissionStatus,
         refreshContacts,
@@ -226,6 +237,8 @@ export const [ContactsProvider, useContacts] =
       permissionStatus,
       loading,
       error,
+      contactSharingAllowed,
+      setContactSharingAllowed,
       requestPermission,
       refreshContacts,
       findContactByName,
