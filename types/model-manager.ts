@@ -86,6 +86,11 @@ export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
   selectedModelId: null,
 };
 
+export interface HuggingFaceRepo {
+  repo: string;
+  files: string[];
+}
+
 export const AVAILABLE_MODELS: LLMModel[] = [
   {
     id: 'dolphin-3.0-coreml',
@@ -97,7 +102,7 @@ export const AVAILABLE_MODELS: LLMModel[] = [
     quantization: 'int8',
     parameters: '3B',
     contextLength: 8192,
-    downloadUrl: 'https://huggingface.co/ales27pm/Dolphin3.0-CoreML/resolve/main/model.mlpackage',
+    downloadUrl: 'hf://ales27pm/Dolphin3.0-CoreML',
     isDownloaded: false,
     isLoaded: false,
     isDownloading: false,
@@ -126,7 +131,7 @@ export const AVAILABLE_MODELS: LLMModel[] = [
     quantization: 'int4',
     parameters: '1B',
     contextLength: 8192,
-    downloadUrl: 'https://huggingface.co/apple/Llama-3.2-1B-Instruct-4bit/resolve/main/model.mlpackage',
+    downloadUrl: 'hf://apple/coreml-llama-3.2-1b-instruct-4bit',
     isDownloaded: false,
     isLoaded: false,
     isDownloading: false,
@@ -155,7 +160,7 @@ export const AVAILABLE_MODELS: LLMModel[] = [
     quantization: 'int4',
     parameters: '3B',
     contextLength: 8192,
-    downloadUrl: 'https://huggingface.co/apple/Llama-3.2-3B-Instruct-4bit/resolve/main/model.mlpackage',
+    downloadUrl: 'hf://apple/coreml-llama-3.2-3b-instruct-4bit',
     isDownloaded: false,
     isLoaded: false,
     isDownloading: false,
