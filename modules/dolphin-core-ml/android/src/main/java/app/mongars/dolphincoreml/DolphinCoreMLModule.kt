@@ -38,7 +38,9 @@ class DolphinCoreMLModule : Module() {
       mapOf(
         "encoding" to emptyMap<String, Any>(),
         "generation" to emptyMap<String, Any>(),
-        "totalInferences" to 0
+        "totalInferences" to 0,
+        "lastOperationDuration" to 0,
+        "lastOperationType" to ""
       )
     }
 
