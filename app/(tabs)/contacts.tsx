@@ -1,5 +1,5 @@
 import { Stack } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -9,7 +9,6 @@ import {
   Switch,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -26,24 +25,11 @@ export default function ContactsScreen() {
     setContactSharingAllowed,
     requestPermission,
     refreshContacts,
-    const [query, setQuery] = useState("");
-    const [debouncedQuery, setDebouncedQuery] = useState(query);
+  } = useContacts();
 
-    useEffect(() => {
-      const handler = setTimeout(() => setDebouncedQuery(query), 300);
-      return () => clearTimeout(handler);
-    }, [query]);
-
-    const visibleContacts = useMemo(() => {
-      const trimmed = debouncedQuery.trim();
-      if (trimmed) {
-        return findContactByName(trimmed, 20);
-      }
-      return contacts.slice(0, 50);
-    }, [contacts, findContactByName, debouncedQuery]);
-    }
+  const visibleContacts = useMemo(() => {
     return contacts.slice(0, 50);
-  }, [contacts, findContactByName, query]);
+  }, [contacts]);
 
   useEffect(() => {
     if (permissionStatus === "granted" && contacts.length === 0 && !loading) {
@@ -134,17 +120,9 @@ export default function ContactsScreen() {
       </View>
 
       <Text style={styles.statusText}>Permission: {permissionStatus}</Text>
-      renderItem={({ item }) => {
-        const primaryPhone = item.phoneNumbers?.[0];
-        const primaryEmail = item.emails?.[0];
-        return (
-          <View style={styles.contactRow}>
-            <Text style={styles.contactName}>{item.name}</Text>
-            {primaryPhone ? (
-              <Text style={styles.contactMeta}>{primaryPhone}</Text>
-            ) : null}
-            {primaryEmail ? (
-              <Text style={styles.contactMeta}>{primaryEmail}</Text>
+
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
       {loading && (
         <ActivityIndicator style={{ marginVertical: 12 }} color="#60a5fa" />
       )}

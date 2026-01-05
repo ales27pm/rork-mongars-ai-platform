@@ -42,7 +42,7 @@ const normalizeContact = (contact: Contacts.Contact): StoredContact | null => {
     .filter((value): value is string => Boolean(value));
 
   return {
-    id: contact.id,
+    id: `contact-${name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     name,
     phoneNumbers,
     emails,
@@ -53,16 +53,7 @@ const normalizeContact = (contact: Contacts.Contact): StoredContact | null => {
 export const [ContactsProvider, useContacts] =
   createContextHook<ContactsContextValue>(() => {
     const [contacts, setContacts] = useState<StoredContact[]>([]);
-  >("unknown");
-
-  useEffect(() => {
-    (async () => {
-      const { status } = await Contacts.getPermissionsAsync();
-      const granted =
-        status === Contacts.PermissionStatus.GRANTED || status === "granted";
-      setPermissionStatus(granted ? "granted" : "denied");
-    })();
-  }, []);
+    const [permissionStatus, setPermissionStatus] = useState<
       "unknown" | "granted" | "denied" | "unavailable"
     >("unknown");
     const [loading, setLoading] = useState(false);
@@ -75,12 +66,12 @@ export const [ContactsProvider, useContacts] =
         setError("Contacts are not available on web");
         return false;
       }
-const granted = status === Contacts.PermissionStatus.GRANTED;
-      setPermissionStatus(granted ? "granted" : "denied");
-      if (granted) setError(null);
-      return granted;
-          status === Contacts.PermissionStatus.GRANTED || status === "granted";
+
+      try {
+        const { status } = await Contacts.requestPermissionsAsync();
+        const granted = status === Contacts.PermissionStatus.GRANTED;
         setPermissionStatus(granted ? "granted" : "denied");
+        if (granted) setError(null);
         return granted;
       } catch (permissionError) {
         console.error(

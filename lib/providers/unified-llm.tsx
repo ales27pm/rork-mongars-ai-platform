@@ -231,9 +231,9 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
         `[UnifiedLLM] Loaded configuration - Active: ${active?.name || "None"}`,
       );
     } catch (error) {
-      "gen",
-      `${model.modelId}:${request.prompt}:${maxTokens}:${request.temperature}:${request.streaming}`,
-    );
+      console.error("[UnifiedLLM] Load config error:", error);
+    }
+  }, []);
 
   const saveConfig = useCallback(async () => {
     try {
@@ -446,7 +446,6 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
           console.warn("[UnifiedLLM] Real embedding failed, using mock:", err);
           return generateMockEmbedding(request.text);
         });
-        );
 
         const duration = Date.now() - startTime;
 
