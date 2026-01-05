@@ -350,5 +350,5 @@ public class DolphinCoreMLModule: Module {
 
     let magnitude = sqrt(values.reduce(0) { $0 + $1 * $1 })
     guard magnitude > 0 else { return values }
-    return values.map { $0 / magnitude }
-}
+      return values.map { $0 / magnitude }
+    }
