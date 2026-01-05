@@ -53,7 +53,16 @@ const normalizeContact = (contact: Contacts.Contact): StoredContact | null => {
 export const [ContactsProvider, useContacts] =
   createContextHook<ContactsContextValue>(() => {
     const [contacts, setContacts] = useState<StoredContact[]>([]);
-    const [permissionStatus, setPermissionStatus] = useState<
+  >("unknown");
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Contacts.getPermissionsAsync();
+      const granted =
+        status === Contacts.PermissionStatus.GRANTED || status === "granted";
+      setPermissionStatus(granted ? "granted" : "denied");
+    })();
+  }, []);
       "unknown" | "granted" | "denied" | "unavailable"
     >("unknown");
     const [loading, setLoading] = useState(false);
