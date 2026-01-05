@@ -221,30 +221,46 @@ public class DolphinCoreMLModule: Module {
   }
 
   private func runGeneration(prompt: String, params: [String: Any]) async throws -> String {
+    let state = DolphinCoreMLState.shared
     try await ensureModelLoaded()
+    guard let model = await state.model else {
+      throw NSError(domain: "DolphinCoreML", code: -2, userInfo: [NSLocalizedDescriptionKey: "NO_MODEL_LOADED"])
+    }
 
     let start = Date()
 
-    let maxTokens = params["maxTokens"] as? Int ?? 128
-    let temperature = params["temperature"] as? Double ?? 0.7
-    let topP = params["topP"] as? Double ?? 0.9
+    // This is a conceptual implementation. You will need to adapt it to your model's specifics.
+    // e.g., use your actual tokenizer, and match model input/output names and shapes.
+  
+    // 1. Tokenize prompt (replace with your actual tokenizer)
+    // let inputTokens = MyTokenizer.encode(prompt)
 
-    let suffix = "\n[DolphinCoreML] temp=\(temperature) topP=\(topP)"
-    let baseText = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-    let combined = (baseText + " " + suffix)
-    let tokens = combined.split(separator: " ").prefix(maxTokens)
+    // 2. Run prediction loop
+    var outputText = ""
+    // for _ in 0..<(params["maxTokens"] as? Int ?? 128) {
+    //   let inputFeatureProvider = try createModelInput(tokens: inputTokens)
+    //   let output = try model.prediction(from: inputFeatureProvider)
+    //
+    //   // 3. Process output and decode token (replace with your logic)
+    //   let nextToken = processModelOutput(output)
+    //   let nextTokenString = MyTokenizer.decode(nextToken)
+    //
+    //   // 4. Append to results and emit event
+    //   outputText += nextTokenString
+    //   sendEvent("onToken", ["token": nextTokenString])
+    //
+    //   // 5. Check for end-of-sequence token
+    //   if nextToken == MyTokenizer.endTokenId { break }
+    //
+    //   inputTokens.append(nextToken)
+    // }
 
-    var outputTokens: [String] = []
-    for token in tokens {
-      outputTokens.append(String(token))
-      sendEvent("onToken", ["token": String(token)])
-    }
-
-    let result = outputTokens.joined(separator: " ")
+    // Using placeholder as a temporary measure until real generation is implemented.
+    let result = "Placeholder: " + prompt
     sendEvent("onComplete", ["text": result])
 
     let duration = Date().timeIntervalSince(start)
-    await DolphinCoreMLState.shared.recordGeneration(duration: duration)
+    await state.recordGeneration(duration: duration)
     return result
   }
 
