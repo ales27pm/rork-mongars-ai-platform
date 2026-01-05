@@ -255,9 +255,12 @@ public class DolphinCoreMLModule: Module {
     //   inputTokens.append(nextToken)
     // }
 
-    // Using placeholder as a temporary measure until real generation is implemented.
-    let result = "Placeholder: " + prompt
-    sendEvent("onComplete", ["text": result])
+    // Generation is not implemented yet; fail fast so callers can handle it.
+    let error = NSError(domain: "DolphinCoreML", code: -3, userInfo: [
+      NSLocalizedDescriptionKey: "NOT_IMPLEMENTED"
+    ])
+    sendEvent("onError", ["message": error.localizedDescription])
+    throw error
 
     let duration = Date().timeIntervalSince(start)
     await state.recordGeneration(duration: duration)
