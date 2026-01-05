@@ -75,8 +75,7 @@ export const [ContactsProvider, useContacts] =
         setError("Contacts are not available on web");
         return false;
       }
-
-      try {
+const granted = status === Contacts.PermissionStatus.GRANTED;
       setPermissionStatus(granted ? "granted" : "denied");
       if (granted) setError(null);
       return granted;
