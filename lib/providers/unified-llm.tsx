@@ -30,6 +30,19 @@ interface EmbeddingRequest {
   normalize?: boolean;
 }
 
+const countTokensForModel = (model: ModelConfig, text: string): number => {
+  const countTokensFn = model.tokenizer?.countTokens;
+  if (typeof countTokensFn === 'function') {
+    return countTokensFn(text);
+  }
+
+  const estimatedTokens = Math.max(Math.ceil(text.length / 4), 1);
+  console.warn(
+    `[UnifiedLLM] No tokenizer configured for ${model.name}; using heuristic estimate: ${estimatedTokens} tokens`,
+  );
+  return estimatedTokens;
+};
+
 export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
   const instrumentation = useInstrumentation();
   const modelRegistry = useRef(new ModelRegistry());
@@ -119,7 +132,20 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
 
     const model = modelRegistry.current.getActiveModel();
     if (!model) {
-      throw new Error('No active model configured');
+      throw new Error(
+        `Requested tokens (${totalRequestedTokens}) exceed the context window (${model.contextWindow}) for ${model.name}. Available completion tokens: ${available}.`,
+      );
+    const promptTokens = countTokensForModel(model, request.prompt);
+    const maxTokens = request.maxTokens ?? 100;
+    const totalRequestedTokens = promptTokens + maxTokens;
+
+    if (totalRequestedTokens > model.contextWindow) {
+      const available = Math.max(model.contextWindow - promptTokens, 0);
+      const errorMessage = `[UnifiedLLM] Token budget exceeded: prompt=${promptTokens}, requested=${maxTokens}, context=${model.contextWindow}`;
+      console.warn(errorMessage);
+      throw new Error(
+        `Prompt exceeds context window for ${model.name}. Available completion tokens: ${available}`,
+      );
     }
 
     const endOp = instrumentation.startOperation('unified-llm', 'generate', { modelId: model.modelId });
@@ -128,10 +154,12 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
 
     try {
       console.log(`[UnifiedLLM] Generating with ${model.name} (${model.modelId})`);
-      console.log(`[UnifiedLLM] Prompt length: ${request.prompt.length} chars`);
+      console.log(
+        `[UnifiedLLM] Prompt length: ${request.prompt.length} chars (${promptTokens} tokens, max ${model.contextWindow})`,
+      );
       console.log('[UnifiedLLM] On-device mode: using simulated generation');
-      
-      const response = await generateOnDevice(request.prompt, request.maxTokens || 100);
+
+      const response = await generateOnDevice(request.prompt, maxTokens);
 
       const duration = Date.now() - startTime;
       

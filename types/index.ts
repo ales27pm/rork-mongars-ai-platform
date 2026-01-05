@@ -91,6 +91,7 @@ export interface ModelConfig {
   };
   vramRequirement: number;
   description: string;
+  tokenizer?: ModelTokenizer;
 }
 
 export interface UnifiedLLMConfig {
@@ -98,4 +99,10 @@ export interface UnifiedLLMConfig {
   models: ModelConfig[];
   embeddingModelId?: string;
   fallbackModelId?: string;
+}
+
+export interface ModelTokenizer {
+  countTokens: (text: string) => number;
+  encodeText?: (text: string) => { inputIds: number[]; attentionMask: number[] };
+  decodeTokens?: (ids: number[]) => string;
 }
