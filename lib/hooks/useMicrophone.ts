@@ -125,8 +125,10 @@ export function useMicrophone() {
 
   const stopRecording = useCallback(async (): Promise<MicrophoneStopResult | null> => {
     if (!isRecording) {
+      const noRecordingError = new Error('No active recording to stop');
       console.warn('[useMicrophone] No active recording to stop');
-      return null;
+      setError(noRecordingError);
+      throw noRecordingError;
     }
 
     try {
