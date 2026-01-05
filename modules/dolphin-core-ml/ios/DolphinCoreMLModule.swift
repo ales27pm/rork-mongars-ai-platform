@@ -268,10 +268,6 @@ public class DolphinCoreMLModule: Module {
     ])
     sendEvent("onError", ["message": error.localizedDescription])
     throw error
-
-    let duration = Date().timeIntervalSince(start)
-    await state.recordGeneration(duration: duration)
-    return result
   }
 
   private func runEncoding(texts: [String], options: [String: Any]) async throws -> [[Double]] {
