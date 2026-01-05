@@ -58,10 +58,10 @@ export class TransformerEmbeddingService {
     console.log(`[TransformerEmbeddings] Initializing ${this.modelConfig.name}...`);
 
     try {
-      if (Platform.OS === 'web') {
+      if (Platform.OS === 'web' || Platform.OS === 'android') {
         await this.initializeWeb();
       } else {
-        console.warn('[TransformerEmbeddings] Native platform detected, using fallback');
+        console.warn('[TransformerEmbeddings] Platform not supported, using fallback');
         this.isInitialized = true;
       }
 
@@ -84,7 +84,10 @@ export class TransformerEmbeddingService {
       
       env.allowLocalModels = false;
       env.allowRemoteModels = true;
-      env.backends.onnx.wasm.numThreads = 1;
+      
+      if (Platform.OS === 'web') {
+        env.backends.onnx.wasm.numThreads = 1;
+      }
       
       console.log('[TransformerEmbeddings] Loading pipeline for', this.modelConfig.name);
       
@@ -125,7 +128,7 @@ export class TransformerEmbeddingService {
       }
     }
 
-    if (Platform.OS !== 'web' || !this.pipeline) {
+    if ((Platform.OS !== 'web' && Platform.OS !== 'android') || !this.pipeline) {
       return this.generateFallbackEmbedding(text);
     }
 
@@ -172,7 +175,7 @@ export class TransformerEmbeddingService {
       }
     }
 
-    if (Platform.OS !== 'web' || !this.pipeline) {
+    if ((Platform.OS !== 'web' && Platform.OS !== 'android') || !this.pipeline) {
       return texts.map(text => this.generateFallbackEmbedding(text));
     }
 

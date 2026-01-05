@@ -1,5 +1,4 @@
-import { dolphinCoreML } from '@/lib/modules/DolphinCoreML';
-import { transformerEmbeddings } from '@/lib/utils/transformer-embeddings';
+import { crossPlatformML } from '@/lib/utils/cross-platform-ml';
 
 const embeddingCache = new Map<string, number[]>();
 const MAX_CACHE_SIZE = 500;
@@ -10,7 +9,7 @@ export async function generateRealEmbedding(text: string): Promise<number[]> {
   }
 
   try {
-    const embedding = await transformerEmbeddings.encode(text, { normalize: true });
+    const embedding = await crossPlatformML.generateEmbedding(text, { normalize: true });
     
     if (embeddingCache.size >= MAX_CACHE_SIZE) {
       const firstKey = embeddingCache.keys().next().value;
@@ -22,15 +21,8 @@ export async function generateRealEmbedding(text: string): Promise<number[]> {
     
     return embedding;
   } catch (error) {
-    console.warn('[Embedding] Transformer failed, trying DolphinCoreML:', error);
-    try {
-      const embedding = await dolphinCoreML.encode(text);
-      embeddingCache.set(text, embedding);
-      return embedding;
-    } catch (fallbackError) {
-      console.warn('[Embedding] All methods failed, using mock:', fallbackError);
-      return generateMockEmbedding(text);
-    }
+    console.warn('[Embedding] Cross-platform ML failed, using mock:', error);
+    return generateMockEmbedding(text);
   }
 }
 
@@ -53,7 +45,7 @@ export async function generateBatchEmbeddings(texts: string[]): Promise<number[]
   }
 
   try {
-    const newEmbeddings = await transformerEmbeddings.encodeBatch(uncached, { normalize: true });
+    const newEmbeddings = await crossPlatformML.generateBatchEmbeddings(uncached, { normalize: true });
     
     uncached.forEach((text, idx) => {
       if (embeddingCache.size >= MAX_CACHE_SIZE) {
@@ -79,28 +71,8 @@ export async function generateBatchEmbeddings(texts: string[]): Promise<number[]
     
     return results;
   } catch (error) {
-    console.warn('[Embedding] Transformer batch failed, trying DolphinCoreML:', error);
-    try {
-      const newEmbeddings = await dolphinCoreML.encodeBatch(uncached);
-      uncached.forEach((text, idx) => embeddingCache.set(text, newEmbeddings[idx]));
-      
-      const results: number[][] = [];
-      let cachedIdx = 0;
-      let uncachedIdx = 0;
-      
-      for (let i = 0; i < texts.length; i++) {
-        if (uncachedIndices.includes(i)) {
-          results.push(newEmbeddings[uncachedIdx++]);
-        } else {
-          results.push(cached[cachedIdx++]);
-        }
-      }
-      
-      return results;
-    } catch (fallbackError) {
-      console.warn('[Embedding] All batch methods failed, using mock:', fallbackError);
-      return texts.map(generateMockEmbedding);
-    }
+    console.warn('[Embedding] Cross-platform batch ML failed, using mock:', error);
+    return texts.map(generateMockEmbedding);
   }
 }
 
