@@ -267,6 +267,8 @@ public class DolphinCoreMLModule: Module {
     // }
 
     // Generation is not implemented yet; fail fast so callers can handle it.
+    let duration = Date().timeIntervalSince(start)
+    await state.recordGeneration(duration: duration)
     let error = NSError(domain: "DolphinCoreML", code: -3, userInfo: [
       "code": "NOT_IMPLEMENTED",
       NSLocalizedDescriptionKey: "NOT_IMPLEMENTED"
