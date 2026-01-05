@@ -20,7 +20,12 @@ actor DolphinCoreMLState {
   func unload() {
     model = nil
     metadata = [:]
-    os_log("[DolphinCoreML] Model unloaded")
+    totalInferences = 0
+    generationDurations = []
+    encodingDurations = []
+    lastOperationDuration = nil
+    lastOperationType = nil
+    os_log("[DolphinCoreML] Model unloaded and metrics reset")
   }
 
   func loadModelIfNeeded(modelName: String, computeUnits: MLComputeUnits = .all) throws -> MLModel {
