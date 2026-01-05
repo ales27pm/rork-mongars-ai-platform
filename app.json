@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "monGARS AI Platform",
-    "slug": "mongars-ai-platform",
+    "name": "monGARS",
+    "slug": "mongars",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.rork.mongars-ai-platform",
+      "bundleIdentifier": "app.27pm.mongars",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -32,7 +32,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.mongars_ai_platform",
+      "package": "app.27pm.mongars",
       "permissions": [
         "android.permission.VIBRATE",
         "RECORD_AUDIO",
