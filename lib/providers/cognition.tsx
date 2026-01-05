@@ -368,11 +368,10 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
           messages: [{ role: "user", content: contextPrompt }],
         });
 
-        const result = response;
         const inferenceSource = "local" as const;
         telemetry.endTimer("llm_inference", { source: inferenceSource });
 
-        rawResponse = result;
+        rawResponse = response;
         source = inferenceSource;
         confidence = 0.88 + Math.random() * 0.1;
       } catch (error) {

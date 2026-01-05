@@ -1,6 +1,6 @@
 import createContextHook from "@nkzw/create-context-hook";
 import * as Contacts from "expo-contacts";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Platform } from "react-native";
 import type { AgentTool, DeviceContact } from "@/types";
 
@@ -41,8 +41,10 @@ const normalizeContact = (contact: Contacts.Contact): StoredContact | null => {
     .map((entry) => entry.email)
     .filter((value): value is string => Boolean(value));
 
+  const contactId = (contact as any).id || `contact_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
   return {
-    id: `contact-${name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: contactId,
     name,
     phoneNumbers,
     emails,
@@ -59,6 +61,14 @@ export const [ContactsProvider, useContacts] =
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [contactSharingAllowed, setContactSharingAllowed] = useState(false);
+
+    useEffect(() => {
+      (async () => {
+        const { status } = await Contacts.getPermissionsAsync();
+        const granted = status === Contacts.PermissionStatus.GRANTED;
+        setPermissionStatus(granted ? "granted" : "denied");
+      })();
+    }, []);
 
     const requestPermission = useCallback(async () => {
       if (Platform.OS === "web") {
