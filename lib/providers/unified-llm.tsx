@@ -442,8 +442,10 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
       try {
         console.log(`[UnifiedLLM] Embedding with ${model.name}`);
 
-        const embedding = await generateRealEmbedding(request.text).catch(() =>
-          generateMockEmbedding(request.text),
+        const embedding = await generateRealEmbedding(request.text).catch((err) => {
+          console.warn("[UnifiedLLM] Real embedding failed, using mock:", err);
+          return generateMockEmbedding(request.text);
+        });
         );
 
         const duration = Date.now() - startTime;
