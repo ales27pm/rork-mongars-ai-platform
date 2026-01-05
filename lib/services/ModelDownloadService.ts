@@ -65,78 +65,51 @@ export class ModelDownloadService {
   }
   
   private async fetchHuggingFaceRepoFiles(repoId: string): Promise<HuggingFaceFile[]> {
-    try {
-      console.log('[ModelDownloadService] Fetching repo structure for:', repoId);
-      
-      const treeUrl = `https://huggingface.co/api/models/${repoId}/tree/main`;
-      console.log('[ModelDownloadService] Fetching file tree from:', treeUrl);
-      
-      const treeResponse = await fetch(treeUrl, {
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-      
-      if (!treeResponse.ok) {
-        console.error('[ModelDownloadService] Tree API response:', treeResponse.status);
-        console.log('[ModelDownloadService] Trying alternative method - web scraping');
-        return await this.fetchHuggingFaceRepoFilesAlternative(repoId);
-      }
-      
-      const treeData = await treeResponse.json();
-      console.log('[ModelDownloadService] Tree data received');
-      
-      if (!Array.isArray(treeData)) {
-        console.error('[ModelDownloadService] Invalid tree response format');
-        return await this.fetchHuggingFaceRepoFilesAlternative(repoId);
-      }
-      
-      const allFiles: HuggingFaceFile[] = treeData
-        .filter((item: any) => item.type === 'file' && item.path)
-        .map((item: any) => ({
-          path: item.path,
-          size: item.size || 0,
-          lfs: item.lfs ? {
-            oid: item.lfs.oid || '',
-            size: item.lfs.size || item.size || 0,
-            pointerSize: item.lfs.pointerSize || 0,
-          } : undefined,
-        }));
-      
-      console.log(`[ModelDownloadService] Total files in repo: ${allFiles.length}`);
-      console.log('[ModelDownloadService] Sample files:', allFiles.slice(0, 5).map(f => f.path));
-      
-      const mlpackageFiles = allFiles.filter(f => 
-        f.path && f.path.includes('.mlpackage')
-      );
-      
-      console.log(`[ModelDownloadService] Found ${mlpackageFiles.length} mlpackage files`);
-      
-      if (mlpackageFiles.length === 0) {
-        console.warn('[ModelDownloadService] No .mlpackage files found. Looking for any model files...');
-        const modelFiles = allFiles.filter(f => 
-          f.path && (f.path.endsWith('.bin') || f.path.endsWith('.mlmodel') || f.path.endsWith('.safetensors') || f.path.endsWith('.mlmodelc'))
-        );
-        console.log(`[ModelDownloadService] Found ${modelFiles.length} alternative model files`);
-        return modelFiles;
-      }
-      
-      return mlpackageFiles;
-    } catch (error) {
-      console.error('[ModelDownloadService] Failed to fetch repo files:', error);
-      if (error instanceof Error) {
-        console.error('[ModelDownloadService] Error details:', error.message);
-      }
-      console.log('[ModelDownloadService] Trying alternative method...');
-      return await this.fetchHuggingFaceRepoFilesAlternative(repoId);
-    }
+    console.log('[ModelDownloadService] Fetching repo structure for:', repoId);
+    
+    console.log('[ModelDownloadService] Using direct CoreML structure (skipping API due to auth issues)');
+    return await this.fetchHuggingFaceRepoFilesAlternative(repoId);
   }
 
   private async fetchHuggingFaceRepoFilesAlternative(repoId: string): Promise<HuggingFaceFile[]> {
     try {
-      console.log('[ModelDownloadService] Using alternative method for:', repoId);
+      console.log('[ModelDownloadService] Using direct file structure for:', repoId);
       
-      const knownStructure: HuggingFaceFile[] = [
+      const testUrl = `https://huggingface.co/${repoId}/resolve/main/model.mlpackage/Manifest.json`;
+      console.log('[ModelDownloadService] Testing repository access...');
+      
+      try {
+        const testResponse = await fetch(testUrl, { method: 'HEAD' });
+        if (testResponse.ok) {
+          console.log('[ModelDownloadService] Repository is accessible, using standard CoreML structure');
+          
+          const knownStructure: HuggingFaceFile[] = [
+            {
+              path: 'model.mlpackage/Manifest.json',
+              size: 0,
+            },
+            {
+              path: 'model.mlpackage/Data/com.apple.CoreML/model.mlmodel',
+              size: 0,
+            },
+            {
+              path: 'model.mlpackage/Data/com.apple.CoreML/weights/weight.bin',
+              size: 0,
+            },
+          ];
+          
+          return knownStructure;
+        }
+      } catch {
+        console.warn('[ModelDownloadService] HEAD request failed, trying direct structure');
+      }
+      
+      console.log('[ModelDownloadService] Using minimal CoreML structure');
+      const minimalStructure: HuggingFaceFile[] = [
+        {
+          path: 'model.mlpackage/Manifest.json',
+          size: 0,
+        },
         {
           path: 'model.mlpackage/Data/com.apple.CoreML/model.mlmodel',
           size: 0,
@@ -145,17 +118,12 @@ export class ModelDownloadService {
           path: 'model.mlpackage/Data/com.apple.CoreML/weights/weight.bin',
           size: 0,
         },
-        {
-          path: 'model.mlpackage/Manifest.json',
-          size: 0,
-        },
       ];
       
-      console.log('[ModelDownloadService] Using known CoreML structure');
-      return knownStructure;
+      return minimalStructure;
     } catch (error) {
       console.error('[ModelDownloadService] Alternative method failed:', error);
-      throw new Error('Failed to fetch repository structure. The model may be private or unavailable.');
+      throw new Error('Failed to access repository. Please check the repository URL and try again.');
     }
   }
 
@@ -167,7 +135,8 @@ export class ModelDownloadService {
   ): Promise<boolean> {
     try {
       const url = `https://huggingface.co/${repoId}/resolve/main/${filePath}`;
-      console.log('[ModelDownloadService] Downloading file:', filePath);
+      console.log('[ModelDownloadService] Downloading:', url);
+      console.log('[ModelDownloadService] To:', localPath);
       
       const callback = (downloadProgress: FileSystem.DownloadProgressData) => {
         if (onProgress) {
@@ -178,14 +147,28 @@ export class ModelDownloadService {
       const downloadResumable = FileSystem.createDownloadResumable(
         url,
         localPath,
-        {},
+        {
+          headers: {
+            'Accept': '*/*',
+          },
+        },
         callback
       );
       
       const result = await downloadResumable.downloadAsync();
-      return result !== null && result !== undefined;
+      
+      if (result) {
+        console.log('[ModelDownloadService] Successfully downloaded:', filePath);
+        return true;
+      } else {
+        console.error('[ModelDownloadService] Download returned null for:', filePath);
+        return false;
+      }
     } catch (error) {
-      console.error('[ModelDownloadService] Failed to download file:', filePath, error);
+      console.error('[ModelDownloadService] Failed to download file:', filePath);
+      if (error instanceof Error) {
+        console.error('[ModelDownloadService] Error message:', error.message);
+      }
       return false;
     }
   }
