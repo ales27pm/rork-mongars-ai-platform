@@ -81,8 +81,9 @@ export default function ContactsScreen() {
           <Text style={styles.introTitle}>On-device address book</Text>
         </View>
         <Text style={styles.introText}>
-          Contacts stay on your device. Grant access to let the assistant find
-          names without uploading them.
+          Grant access to let the assistant find names. Matching contact details
+          you ask the assistant about will be sent to the AI model provider;
+          nothing is uploaded otherwise.
         </Text>
       </View>
 

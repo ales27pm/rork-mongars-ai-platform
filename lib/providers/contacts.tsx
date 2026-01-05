@@ -169,7 +169,8 @@ export const [ContactsProvider, useContacts] =
     const contactsTool = useMemo(
       (): ContactsContextValue["contactsTool"] => ({
         name: "contacts_search",
-        description: "Searches device contacts by name (on-device only)",
+        description:
+          "Searches device contacts by name and returns details to the calling AI model",
         parameters: {
           type: "object",
           properties: {
