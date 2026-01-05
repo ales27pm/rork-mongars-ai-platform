@@ -136,8 +136,8 @@ public class DolphinCoreMLModule: Module {
           return [
             "success": false,
             "error": [
-              "code": "MODEL_NOT_FOUND",
-              "message": "The requested model could not be located in the app bundle or documents directory."
+              "code": (error as NSError).domain,
+              "message": error.localizedDescription
             ],
             "metadata": [
               "modelName": modelName
