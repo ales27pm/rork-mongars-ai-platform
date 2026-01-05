@@ -66,19 +66,66 @@ export class ModelDownloadService {
   
   private async fetchHuggingFaceRepoFiles(repoId: string): Promise<HuggingFaceFile[]> {
     try {
-      const apiUrl = `https://huggingface.co/api/models/${repoId}/tree/main`;
-      console.log('[ModelDownloadService] Fetching repo structure from:', apiUrl);
+      console.log('[ModelDownloadService] Fetching repo structure for:', repoId);
       
-      const response = await fetch(apiUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch repo structure: ${response.statusText}`);
+      const apiUrl = `https://huggingface.co/api/models/${repoId}`;
+      console.log('[ModelDownloadService] Fetching model info from:', apiUrl);
+      
+      const modelResponse = await fetch(apiUrl, {
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      
+      if (!modelResponse.ok) {
+        const errorText = await modelResponse.text();
+        console.error('[ModelDownloadService] Model API response:', modelResponse.status, errorText);
+        throw new Error(`Failed to fetch model info: ${modelResponse.status} ${modelResponse.statusText}`);
       }
       
-      const files = await response.json();
-      return files.filter((f: HuggingFaceFile) => f.path.startsWith('model.mlpackage/'));
+      const modelInfo = await modelResponse.json();
+      console.log('[ModelDownloadService] Model info received, siblings count:', modelInfo.siblings?.length || 0);
+      
+      if (!modelInfo.siblings || !Array.isArray(modelInfo.siblings)) {
+        console.error('[ModelDownloadService] No siblings field in response');
+        return [];
+      }
+      
+      const allFiles: HuggingFaceFile[] = modelInfo.siblings.map((file: any) => ({
+        path: file.rfilename,
+        size: file.size || 0,
+        lfs: file.lfs ? {
+          oid: file.lfs.oid,
+          size: file.lfs.size,
+          pointerSize: file.lfs.pointerSize,
+        } : undefined,
+      }));
+      
+      console.log(`[ModelDownloadService] Total files in repo: ${allFiles.length}`);
+      console.log('[ModelDownloadService] Sample files:', allFiles.slice(0, 5).map(f => f.path));
+      
+      const mlpackageFiles = allFiles.filter(f => 
+        f.path && f.path.includes('.mlpackage')
+      );
+      
+      console.log(`[ModelDownloadService] Found ${mlpackageFiles.length} mlpackage files`);
+      
+      if (mlpackageFiles.length === 0) {
+        console.warn('[ModelDownloadService] No .mlpackage files found. Looking for any model files...');
+        const modelFiles = allFiles.filter(f => 
+          f.path && (f.path.endsWith('.bin') || f.path.endsWith('.mlmodel') || f.path.endsWith('.safetensors'))
+        );
+        console.log(`[ModelDownloadService] Found ${modelFiles.length} alternative model files`);
+        return modelFiles;
+      }
+      
+      return mlpackageFiles;
     } catch (error) {
       console.error('[ModelDownloadService] Failed to fetch repo files:', error);
-      return [];
+      if (error instanceof Error) {
+        console.error('[ModelDownloadService] Error details:', error.message, error.stack);
+      }
+      throw error;
     }
   }
 
