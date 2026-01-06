@@ -6,7 +6,8 @@
     "start": "bunx rork start -p 2agpgihkxtu4agpk7y6uc --tunnel",
     "start-web": "bunx rork start -p 2agpgihkxtu4agpk7y6uc --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p 2agpgihkxtu4agpk7y6uc --web --tunnel",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -79,6 +80,7 @@
     "babel-jest": "^30.2.0",
     "eslint": "^9.31.0",
     "eslint-config-expo": "~10.0.0",
+    "patch-package": "^8.0.0",
     "react-test-renderer": "19.2.1",
     "ts-jest": "^29.4.6",
     "typescript": "~5.9.2"
