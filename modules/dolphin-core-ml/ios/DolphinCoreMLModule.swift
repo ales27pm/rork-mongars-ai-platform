@@ -365,6 +365,11 @@ public class DolphinCoreMLModule: Module {
     let seed = payload["seed"] as? UInt64 ?? mlxEngineConfig.seed
     let maxCache = payload["maxCacheEntries"] as? Int ?? mlxEngineConfig.maxCacheEntries
 
+    let modelId = payload["modelId"] as? String ?? mlxEngineConfig.modelId
+    let revision = payload["revision"] as? String ?? mlxEngineConfig.revision
+    let tokenizerId = payload["tokenizerId"] as? String ?? mlxEngineConfig.tokenizerId
+    let localModelPath = payload["localModelPath"] as? String ?? mlxEngineConfig.localModelPath
+
     return MLXEngine.Configuration(
       vocabSize: vocab,
       contextLength: context,
@@ -372,7 +377,11 @@ public class DolphinCoreMLModule: Module {
       heads: heads,
       layers: layers,
       seed: seed,
-      maxCacheEntries: maxCache
+      maxCacheEntries: maxCache,
+      modelId: modelId,
+      revision: revision,
+      tokenizerId: tokenizerId,
+      localModelPath: localModelPath
     )
   }
 
