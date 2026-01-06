@@ -1,5 +1,10 @@
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: EAS profile to use (e.g. production, staging)
+        required: true
+        default: production
 
 jobs:
   build_ios:
