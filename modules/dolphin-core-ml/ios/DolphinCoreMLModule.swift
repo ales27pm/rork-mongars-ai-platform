@@ -249,6 +249,7 @@ public class DolphinCoreMLModule: Module {
           let engineConfig = self.buildMLXConfig(from: config ?? [:])
           let summary: [String: Any]
           if await self.mlxEngine.isReady(for: engineConfig) {
+            self.mlxEngineConfig = engineConfig
             summary = [
               "engine": "mlx",
               "configuration": engineConfig.asDictionary(),
