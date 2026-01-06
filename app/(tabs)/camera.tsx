@@ -17,13 +17,13 @@ import { useCamera } from "@/lib/providers/camera";
 
 export default function CameraScreen() {
   const {
-    permissionStatus,
+    cameraPermissionStatus,
     loading,
     error,
     cameraSharingAllowed,
     setCameraSharingAllowed,
-    requestPermission,
-    takePicture,
+    requestCameraPermission,
+    takePhoto,
     pickImage,
   } = useCamera();
 
@@ -34,7 +34,7 @@ export default function CameraScreen() {
   } | null>(null);
 
   const handleTakePicture = useCallback(async () => {
-    const granted = await requestPermission();
+    const granted = await requestCameraPermission();
     if (!granted) {
       Alert.alert(
         "Permission needed",
@@ -42,11 +42,11 @@ export default function CameraScreen() {
       );
       return;
     }
-    const image = await takePicture();
+    const image = await takePhoto();
     if (image) {
       setCapturedImage(image);
     }
-  }, [takePicture, requestPermission]);
+  }, [takePhoto, requestCameraPermission]);
 
   const handlePickImage = useCallback(async () => {
     const image = await pickImage();
@@ -132,7 +132,7 @@ export default function CameraScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.statusText}>Permission: {permissionStatus}</Text>
+      <Text style={styles.statusText}>Permission: {cameraPermissionStatus}</Text>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 

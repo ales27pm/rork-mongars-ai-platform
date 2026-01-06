@@ -1,349 +1,251 @@
-import { useState, useCallback } from 'react';
-import * as ImagePicker from 'expo-image-picker';
-import { Platform } from 'react-native';
-import createContextHook from '@nkzw/create-context-hook';
+import createContextHook from "@nkzw/create-context-hook";
+import * as ImagePicker from "expo-image-picker";
+import { useCallback, useEffect, useState } from "react";
+import { Platform } from "react-native";
+import type { AgentTool } from "@/types";
 
-export interface ImageResult {
+interface CameraImage {
   uri: string;
   width: number;
   height: number;
-  type: 'image' | 'video';
-  fileSize?: number;
-  base64?: string | null;
-}
-
-export interface AgentTool {
-  name: string;
-  description: string;
-  parameters: {
-    type: string;
-    properties: Record<string, any>;
-    required: string[];
-  };
-  execute: (params: any) => Promise<any>;
+  type?: string;
+  base64?: string;
 }
 
 export const [CameraProvider, useCamera] = createContextHook(() => {
-  const [hasCameraPermission, setHasCameraPermission] = useState(false);
-  const [hasMediaLibraryPermission, setHasMediaLibraryPermission] = useState(false);
-  const [cameraPermissionStatus, setCameraPermissionStatus] = useState<'undetermined' | 'denied' | 'granted'>('undetermined');
-  const [mediaPermissionStatus, setMediaPermissionStatus] = useState<'undetermined' | 'denied' | 'granted'>('undetermined');
-  const [isLoading, setIsLoading] = useState(false);
-  const [lastImage, setLastImage] = useState<ImageResult | null>(null);
-  const [cameraSharingAllowed, setCameraSharingAllowed] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<CameraImage | undefined>(undefined);
+  const [cameraPermissionStatus, setCameraPermissionStatus] = useState<"unknown" | "granted" | "denied" | "unavailable">("unknown");
+  const [mediaLibraryPermissionStatus, setMediaLibraryPermissionStatus] = useState<"unknown" | "granted" | "denied" | "unavailable">("unknown");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cameraSharingAllowed, setCameraSharingAllowed] = useState<boolean>(false);
 
-  const requestCameraPermission = async (): Promise<boolean> => {
-    if (Platform.OS === 'web') {
-      console.log('[CameraProvider] Camera not fully supported on web');
+  const requestCameraPermission = useCallback(async (): Promise<boolean> => {
+    if (Platform.OS === "web") {
+      console.log("[Camera] Camera access not fully supported on web");
+      setCameraPermissionStatus("unavailable");
       return false;
     }
 
     try {
+      const { status: existingStatus } = await ImagePicker.getCameraPermissionsAsync();
+
+      if (existingStatus === "granted") {
+        setCameraPermissionStatus("granted");
+        return true;
+      }
+
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      const granted = status === 'granted';
-      setHasCameraPermission(granted);
-      setCameraPermissionStatus(granted ? 'granted' : 'denied');
-      return granted;
-    } catch (error) {
-      console.error('[CameraProvider] Error requesting camera permission:', error);
-      setCameraPermissionStatus('denied');
+      
+      if (status === "granted") {
+        setCameraPermissionStatus("granted");
+        return true;
+      } else {
+        setCameraPermissionStatus("denied");
+        return false;
+      }
+    } catch (err) {
+      console.error("[Camera] Permission request failed:", err);
+      setError((err as Error).message);
+      setCameraPermissionStatus("denied");
       return false;
     }
-  };
+  }, []);
 
-  const requestMediaLibraryPermission = async (): Promise<boolean> => {
-    if (Platform.OS === 'web') {
-      console.log('[CameraProvider] Media library not fully supported on web');
-      return false;
+  const requestMediaLibraryPermission = useCallback(async (): Promise<boolean> => {
+    if (Platform.OS === "web") {
+      setMediaLibraryPermissionStatus("granted");
+      return true;
     }
 
     try {
+      const { status: existingStatus } = await ImagePicker.getMediaLibraryPermissionsAsync();
+
+      if (existingStatus === "granted") {
+        setMediaLibraryPermissionStatus("granted");
+        return true;
+      }
+
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      const granted = status === 'granted';
-      setHasMediaLibraryPermission(granted);
-      setMediaPermissionStatus(granted ? 'granted' : 'denied');
-      return granted;
-    } catch (error) {
-      console.error('[CameraProvider] Error requesting media library permission:', error);
-      setMediaPermissionStatus('denied');
+      
+      if (status === "granted") {
+        setMediaLibraryPermissionStatus("granted");
+        return true;
+      } else {
+        setMediaLibraryPermissionStatus("denied");
+        return false;
+      }
+    } catch (err) {
+      console.error("[Camera] Media library permission request failed:", err);
+      setError((err as Error).message);
+      setMediaLibraryPermissionStatus("denied");
       return false;
     }
-  };
+  }, []);
 
-  const takePicture = useCallback(async (options?: {
-    allowsEditing?: boolean;
-    quality?: number;
-    includeBase64?: boolean;
-  }): Promise<ImageResult | null> => {
-    if (Platform.OS === 'web') {
-      console.warn('[CameraProvider] Camera not available on web');
-      return null;
+  const takePhoto = useCallback(async (): Promise<CameraImage | undefined> => {
+    if (cameraPermissionStatus !== "granted") {
+      console.log("[Camera] Cannot take photo: permission not granted");
+      return undefined;
     }
 
-    const granted = hasCameraPermission || await requestCameraPermission();
-    if (!granted) {
-      console.warn('[CameraProvider] Camera permission not granted');
-      return null;
-    }
+    setLoading(true);
+    setError(null);
 
-    setIsLoading(true);
     try {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: options?.allowsEditing ?? false,
-        quality: options?.quality ?? 0.8,
-        base64: options?.includeBase64 ?? false,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
       });
 
-      if (result.canceled) {
-        return null;
-      }
-
-      const asset = result.assets[0];
-      const imageResult: ImageResult = {
-        uri: asset.uri,
-        width: asset.width,
-        height: asset.height,
-        type: 'image',
-        fileSize: asset.fileSize,
-        base64: asset.base64 ?? null
-      };
-
-      setLastImage(imageResult);
-      return imageResult;
-    } catch (error) {
-      console.error('[CameraProvider] Error taking picture:', error);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [hasCameraPermission]);
-
-  const pickImage = useCallback(async (options?: {
-    allowsEditing?: boolean;
-    quality?: number;
-    includeBase64?: boolean;
-    allowsMultipleSelection?: boolean;
-  }): Promise<ImageResult | ImageResult[] | null> => {
-    if (Platform.OS === 'web') {
-      console.warn('[CameraProvider] Image picker limited on web');
-    }
-
-    const granted = hasMediaLibraryPermission || await requestMediaLibraryPermission();
-    if (!granted && Platform.OS !== 'web') {
-      console.warn('[CameraProvider] Media library permission not granted');
-      return null;
-    }
-
-    setIsLoading(true);
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: options?.allowsEditing ?? false,
-        quality: options?.quality ?? 0.8,
-        base64: options?.includeBase64 ?? false,
-        allowsMultipleSelection: options?.allowsMultipleSelection ?? false,
-      });
-
-      if (result.canceled) {
-        return null;
-      }
-
-      if (options?.allowsMultipleSelection) {
-        return result.assets.map(asset => ({
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const image: CameraImage = {
           uri: asset.uri,
           width: asset.width,
           height: asset.height,
-          type: 'image' as const,
-          fileSize: asset.fileSize,
-          base64: asset.base64 ?? null
-        }));
+          type: asset.type ?? undefined,
+        };
+        
+        setSelectedImage(image);
+        console.log(`[Camera] Photo taken: ${asset.width}x${asset.height}`);
+        return image;
       }
 
-      const asset = result.assets[0];
-      const imageResult: ImageResult = {
-        uri: asset.uri,
-        width: asset.width,
-        height: asset.height,
-        type: 'image',
-        fileSize: asset.fileSize,
-        base64: asset.base64 ?? null
-      };
-
-      setLastImage(imageResult);
-      return imageResult;
-    } catch (error) {
-      console.error('[CameraProvider] Error picking image:', error);
-      return null;
+      return undefined;
+    } catch (err) {
+      console.error("[Camera] Failed to take photo:", err);
+      setError((err as Error).message);
+      return undefined;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, [hasMediaLibraryPermission]);
+  }, [cameraPermissionStatus]);
 
-  const cameraCaptureTool: AgentTool = {
-    name: 'camera_capture',
-    description: 'Captures a photo using the device camera. Use this when the user asks to take a picture or capture an image. Returns the image URI and metadata when camera sharing is enabled.',
+  const pickImage = useCallback(async (): Promise<CameraImage | undefined> => {
+    if (mediaLibraryPermissionStatus !== "granted") {
+      console.log("[Camera] Cannot pick image: permission not granted");
+      return undefined;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const image: CameraImage = {
+          uri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+          type: asset.type ?? undefined,
+        };
+        
+        setSelectedImage(image);
+        console.log(`[Camera] Image picked: ${asset.width}x${asset.height}`);
+        return image;
+      }
+
+      return undefined;
+    } catch (err) {
+      console.error("[Camera] Failed to pick image:", err);
+      setError((err as Error).message);
+      return undefined;
+    } finally {
+      setLoading(false);
+    }
+  }, [mediaLibraryPermissionStatus]);
+
+  useEffect(() => {
+    const checkPermissions = async () => {
+      if (Platform.OS === "web") {
+        setCameraPermissionStatus("unavailable");
+        setMediaLibraryPermissionStatus("granted");
+        return;
+      }
+
+      try {
+        const { status: cameraStatus } = await ImagePicker.getCameraPermissionsAsync();
+        setCameraPermissionStatus(cameraStatus === "granted" ? "granted" : cameraStatus === "denied" ? "denied" : "unknown");
+
+        const { status: libraryStatus } = await ImagePicker.getMediaLibraryPermissionsAsync();
+        setMediaLibraryPermissionStatus(libraryStatus === "granted" ? "granted" : libraryStatus === "denied" ? "denied" : "unknown");
+      } catch (err) {
+        console.error("[Camera] Failed to check permissions:", err);
+        setCameraPermissionStatus("unknown");
+        setMediaLibraryPermissionStatus("unknown");
+      }
+    };
+
+    checkPermissions();
+  }, []);
+
+  const takePictureTool: AgentTool<
+    { source: "camera" | "library" },
+    { image?: CameraImage; error?: string }
+  > = {
+    name: "take_picture",
+    description: "Takes a photo using the device camera or picks an image from the photo library. Returns image metadata including dimensions and URI when camera sharing is enabled.",
     parameters: {
-      type: 'object',
-      properties: {
-        allowsEditing: {
-          type: 'boolean',
-          description: 'Whether to allow the user to edit the photo after capture'
-        },
-        quality: {
-          type: 'number',
-          description: 'Image quality from 0 to 1 (default: 0.8)'
-        }
+      source: {
+        type: "string",
+        description: "Image source: 'camera' to take a new photo, or 'library' to pick from existing photos",
+        required: true,
       },
-      required: []
     },
-    execute: async (params: { allowsEditing?: boolean; quality?: number }) => {
-      console.log('[CameraTool] Executing camera_capture with params:', params);
-
+    execute: async (params) => {
       if (!cameraSharingAllowed) {
         return {
-          error: 'Camera access not enabled',
-          message: 'User has not granted camera sharing permission to AI'
+          error: "Camera sharing is not enabled. Please enable it in settings.",
         };
       }
 
-      if (cameraPermissionStatus !== 'granted') {
-        const granted = await requestCameraPermission();
-        if (!granted) {
-          return {
-            error: 'Permission denied',
-            message: 'Camera permission not granted by system'
-          };
-        }
+      const isCamera = params.source === "camera";
+      const permissionStatus = isCamera ? cameraPermissionStatus : mediaLibraryPermissionStatus;
+
+      if (permissionStatus !== "granted") {
+        return {
+          error: `${isCamera ? "Camera" : "Media library"} permission not granted. Please grant permission to access ${isCamera ? "camera" : "photos"}.`,
+        };
       }
 
-      setIsLoading(true);
       try {
-        const image = await takePicture({
-          allowsEditing: params.allowsEditing,
-          quality: params.quality,
-          includeBase64: false
-        });
-
-        if (!image) {
-          return {
-            error: 'Capture cancelled',
-            message: 'User cancelled photo capture or an error occurred'
-          };
+        const image = isCamera ? await takePhoto() : await pickImage();
+        
+        if (image) {
+          return { image };
+        } else {
+          return { error: "Image capture was canceled or failed" };
         }
-
+      } catch (err) {
         return {
-          success: true,
-          image: {
-            uri: image.uri,
-            width: image.width,
-            height: image.height,
-            fileSize: image.fileSize
-          },
-          message: 'Photo captured successfully'
+          error: `Failed to ${isCamera ? "take photo" : "pick image"}: ${(err as Error).message}`,
         };
-      } catch (error) {
-        return {
-          error: 'Capture failed',
-          message: error instanceof Error ? error.message : 'Unknown error'
-        };
-      } finally {
-        setIsLoading(false);
       }
-    }
-  };
-
-  const imagePickerTool: AgentTool = {
-    name: 'image_picker',
-    description: 'Lets the user select an image from their photo library. Use this when the user wants to choose an existing photo. Returns the image URI and metadata when media library access is enabled.',
-    parameters: {
-      type: 'object',
-      properties: {
-        allowsEditing: {
-          type: 'boolean',
-          description: 'Whether to allow the user to edit the selected image'
-        },
-        quality: {
-          type: 'number',
-          description: 'Image quality from 0 to 1 (default: 0.8)'
-        }
-      },
-      required: []
     },
-    execute: async (params: { allowsEditing?: boolean; quality?: number }) => {
-      console.log('[CameraTool] Executing image_picker with params:', params);
-
-      if (!cameraSharingAllowed) {
-        return {
-          error: 'Media library access not enabled',
-          message: 'User has not granted media library sharing permission to AI'
-        };
-      }
-
-      if (mediaPermissionStatus !== 'granted') {
-        const granted = await requestMediaLibraryPermission();
-        if (!granted) {
-          return {
-            error: 'Permission denied',
-            message: 'Media library permission not granted by system'
-          };
-        }
-      }
-
-      setIsLoading(true);
-      try {
-        const image = await pickImage({
-          allowsEditing: params.allowsEditing,
-          quality: params.quality,
-          includeBase64: false
-        });
-
-        if (!image || Array.isArray(image)) {
-          return {
-            error: 'Selection cancelled',
-            message: 'User cancelled image selection or an error occurred'
-          };
-        }
-
-        return {
-          success: true,
-          image: {
-            uri: image.uri,
-            width: image.width,
-            height: image.height,
-            fileSize: image.fileSize
-          },
-          message: 'Image selected successfully'
-        };
-      } catch (error) {
-        return {
-          error: 'Selection failed',
-          message: error instanceof Error ? error.message : 'Unknown error'
-        };
-      } finally {
-        setIsLoading(false);
-      }
-    }
   };
 
   return {
-    hasCameraPermission,
-    hasMediaLibraryPermission,
+    selectedImage,
     cameraPermissionStatus,
-    mediaPermissionStatus,
-    permissionStatus: cameraPermissionStatus,
-    isLoading,
-    loading: isLoading,
-    lastImage,
-    error: null as string | null,
+    mediaLibraryPermissionStatus,
+    loading,
+    error,
     cameraSharingAllowed,
     setCameraSharingAllowed,
     requestCameraPermission,
     requestMediaLibraryPermission,
-    requestPermission: requestCameraPermission,
-    takePicture,
+    takePhoto,
     pickImage,
-    cameraCaptureTool,
-    imagePickerTool
+    takePictureTool,
   };
 });

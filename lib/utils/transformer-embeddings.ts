@@ -1,4 +1,4 @@
-
+import { Platform } from 'react-native';
 
 export interface TransformerModel {
   name: string;
@@ -62,7 +62,7 @@ export class TransformerEmbeddingService {
       return true;
     }
 
-    console.log(`[TransformerEmbeddings] Initializing ${this.modelConfig.name}`);
+    console.log(`[TransformerEmbeddings] Initializing ${this.modelConfig.name} on ${Platform.OS}`);
 
     try {
       const { pipeline, env } = await import('@xenova/transformers');
@@ -70,12 +70,18 @@ export class TransformerEmbeddingService {
       env.allowLocalModels = false;
       env.allowRemoteModels = true;
       
+      if (Platform.OS === 'web') {
+        env.backends.onnx.wasm.numThreads = 1;
+      }
+      
       console.log('[TransformerEmbeddings] Loading transformer pipeline...');
       
       this.pipeline = await pipeline('feature-extraction', this.modelConfig.name, {
+        quantized: true,
         progress_callback: (progress: any) => {
           if (progress.status === 'progress') {
-            console.log(`[TransformerEmbeddings] Download progress: ${Math.round(progress.progress || 0)}%`);
+            const percent = Math.round((progress.loaded / progress.total) * 100) || 0;
+            console.log(`[TransformerEmbeddings] Download progress: ${percent}%`);
           } else if (progress.status === 'done') {
             console.log(`[TransformerEmbeddings] Downloaded: ${progress.file}`);
           }

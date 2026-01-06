@@ -7,186 +7,278 @@ import type { AgentTool } from "@/types";
 interface LocationData {
   latitude: number;
   longitude: number;
-  altitude: number | null;
-  accuracy: number | null;
-  city?: string;
-  region?: string;
-  country?: string;
+  altitude?: number | null;
+  accuracy?: number | null;
+  heading?: number | null;
+  speed?: number | null;
   timestamp: number;
 }
 
-interface LocationContextValue {
-  currentLocation: LocationData | null;
-  permissionStatus: "unknown" | "granted" | "denied" | "unavailable";
-  loading: boolean;
-  error: string | null;
-  locationSharingAllowed: boolean;
-  setLocationSharingAllowed: (allowed: boolean) => void;
-  requestPermission: () => Promise<boolean>;
-  getCurrentLocation: () => Promise<LocationData | null>;
-  locationTool: AgentTool<
-    { includeAddress?: boolean },
-    { location: LocationData | null; error?: string }
-  >;
+interface LocationAddress {
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
+  postalCode?: string | null;
+  street?: string | null;
+  name?: string | null;
+  formattedAddress?: string;
 }
 
-export const [LocationProvider, useLocation] = createContextHook<LocationContextValue>(() => {
-  const [currentLocation, setCurrentLocation] = useState<LocationData | null>(null);
+export const [LocationProvider, useLocation] = createContextHook(() => {
+  const [currentLocation, setCurrentLocation] = useState<LocationData | undefined>(undefined);
+  const [currentAddress, setCurrentAddress] = useState<LocationAddress | undefined>(undefined);
   const [permissionStatus, setPermissionStatus] = useState<"unknown" | "granted" | "denied" | "unavailable">("unknown");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [locationSharingAllowed, setLocationSharingAllowed] = useState(false);
+  const [locationSharingAllowed, setLocationSharingAllowed] = useState<boolean>(false);
 
-  useEffect(() => {
-    (async () => {
-      if (Platform.OS === "web") {
-        setPermissionStatus("unavailable");
-        return;
-      }
-
-      try {
-        const { status } = await Location.getForegroundPermissionsAsync();
-        setPermissionStatus(status === Location.PermissionStatus.GRANTED ? "granted" : "denied");
-      } catch (err) {
-        console.error("[Location] Failed to check permissions", err);
-        setPermissionStatus("unavailable");
-      }
-    })();
-  }, []);
-
-  const requestPermission = useCallback(async () => {
+  const requestPermission = useCallback(async (): Promise<boolean> => {
     if (Platform.OS === "web") {
-      setPermissionStatus("unavailable");
-      setError("Location services are not available on web");
-      return false;
+      try {
+        if ("geolocation" in navigator) {
+          setPermissionStatus("granted");
+          return true;
+        } else {
+          console.log("[Location] Geolocation not supported on this browser");
+          setPermissionStatus("unavailable");
+          return false;
+        }
+      } catch (err) {
+        console.error("[Location] Web geolocation check failed:", err);
+        setPermissionStatus("unavailable");
+        return false;
+      }
     }
 
     try {
+      const { status: existingStatus } = await Location.getForegroundPermissionsAsync();
+
+      if (existingStatus === "granted") {
+        setPermissionStatus("granted");
+        return true;
+      }
+
       const { status } = await Location.requestForegroundPermissionsAsync();
-      const granted = status === Location.PermissionStatus.GRANTED;
-      setPermissionStatus(granted ? "granted" : "denied");
-      if (granted) setError(null);
-      return granted;
+      
+      if (status === "granted") {
+        setPermissionStatus("granted");
+        return true;
+      } else {
+        setPermissionStatus("denied");
+        return false;
+      }
     } catch (err) {
-      console.error("[Location] Failed to request permission", err);
+      console.error("[Location] Permission request failed:", err);
+      setError((err as Error).message);
       setPermissionStatus("denied");
-      setError("Unable to request location permission");
       return false;
     }
   }, []);
 
-  const getCurrentLocation = useCallback(async (): Promise<LocationData | null> => {
-    if (Platform.OS === "web") {
-      setError("Location services are not available on web");
-      return null;
+  const getCurrentLocation = useCallback(async (): Promise<LocationData | undefined> => {
+    if (permissionStatus !== "granted") {
+      console.log("[Location] Cannot get location: permission not granted");
+      return undefined;
     }
 
     setLoading(true);
     setError(null);
 
-    const granted = permissionStatus === "granted" || await requestPermission();
-    if (!granted) {
-      setLoading(false);
-      return null;
-    }
-
     try {
-      const position = await Location.getCurrentPositionAsync({
+      if (Platform.OS === "web" && "geolocation" in navigator) {
+        return new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const locationData: LocationData = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                altitude: position.coords.altitude,
+                accuracy: position.coords.accuracy,
+                heading: position.coords.heading,
+                speed: position.coords.speed,
+                timestamp: position.timestamp,
+              };
+              setCurrentLocation(locationData);
+              setLoading(false);
+              resolve(locationData);
+            },
+            (err) => {
+              console.error("[Location] Web geolocation failed:", err);
+              setError(err.message);
+              setLoading(false);
+              reject(err);
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+          );
+        });
+      }
+
+      const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
 
-      let city: string | undefined;
-      let region: string | undefined;
-      let country: string | undefined;
-
-      try {
-        const [address] = await Location.reverseGeocodeAsync({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
-
-        if (address) {
-          city = address.city || undefined;
-          region = address.region || undefined;
-          country = address.country || undefined;
-        }
-      } catch (geocodeErr) {
-        console.warn("[Location] Reverse geocoding failed", geocodeErr);
-      }
-
       const locationData: LocationData = {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        altitude: position.coords.altitude,
-        accuracy: position.coords.accuracy,
-        city,
-        region,
-        country,
-        timestamp: position.timestamp,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        altitude: location.coords.altitude,
+        accuracy: location.coords.accuracy,
+        heading: location.coords.heading,
+        speed: location.coords.speed,
+        timestamp: location.timestamp,
       };
 
       setCurrentLocation(locationData);
+      console.log(`[Location] Got current location: ${locationData.latitude}, ${locationData.longitude}`);
+      
       return locationData;
     } catch (err) {
-      console.error("[Location] Failed to get current location", err);
-      setError("Failed to get current location. Please try again.");
-      return null;
+      console.error("[Location] Failed to get current location:", err);
+      setError((err as Error).message);
+      return undefined;
     } finally {
       setLoading(false);
     }
-  }, [permissionStatus, requestPermission]);
+  }, [permissionStatus]);
 
-  const locationTool: LocationContextValue["locationTool"] = {
-    name: "get_location",
-    description: "Gets the device's current GPS location (latitude, longitude) and optionally reverse geocoded address when location sharing is enabled",
-    parameters: {
-      type: "object",
-      properties: {
-        includeAddress: {
-          type: "boolean",
-          description: "Whether to include reverse geocoded address (city, region, country)",
-        },
-      },
-      required: [],
-    },
-    execute: async ({ includeAddress = true }) => {
+  const reverseGeocode = useCallback(
+    async (latitude: number, longitude: number): Promise<LocationAddress | undefined> => {
       if (Platform.OS === "web") {
-        return { location: null, error: "Location services are not available on web" };
-      }
-
-      if (!locationSharingAllowed) {
-        return {
-          location: null,
-          error: "Location sharing with the AI model is disabled by the user",
-        };
-      }
-
-      const granted = permissionStatus === "granted" || await requestPermission();
-      if (!granted) {
-        return { location: null, error: "Location permission not granted" };
+        console.log("[Location] Reverse geocoding not available on web");
+        return undefined;
       }
 
       try {
-        const location = await getCurrentLocation();
-        
-        if (!location) {
-          return { location: null, error: "Failed to retrieve location" };
+        const addresses = await Location.reverseGeocodeAsync({
+          latitude,
+          longitude,
+        });
+
+        if (addresses.length > 0) {
+          const address = addresses[0];
+          const locationAddress: LocationAddress = {
+            city: address.city,
+            region: address.region,
+            country: address.country,
+            postalCode: address.postalCode,
+            street: address.street,
+            name: address.name,
+            formattedAddress: [
+              address.street,
+              address.city,
+              address.region,
+              address.postalCode,
+              address.country,
+            ]
+              .filter(Boolean)
+              .join(", "),
+          };
+
+          setCurrentAddress(locationAddress);
+          console.log(`[Location] Reverse geocoded to: ${locationAddress.formattedAddress}`);
+          
+          return locationAddress;
         }
 
-        if (!includeAddress) {
-          const { city, region, country, ...basicLocation } = location;
-          return { location: basicLocation as LocationData };
-        }
-
-        return { location };
+        return undefined;
       } catch (err) {
-        return { location: null, error: err instanceof Error ? err.message : "Failed to get location" };
+        console.error("[Location] Reverse geocoding failed:", err);
+        return undefined;
+      }
+    },
+    []
+  );
+
+  const getCurrentLocationWithAddress = useCallback(async (): Promise<{
+    location?: LocationData;
+    address?: LocationAddress;
+  }> => {
+    const location = await getCurrentLocation();
+    
+    if (location && Platform.OS !== "web") {
+      const address = await reverseGeocode(location.latitude, location.longitude);
+      return { location, address };
+    }
+    
+    return { location };
+  }, [getCurrentLocation, reverseGeocode]);
+
+  useEffect(() => {
+    const checkPermission = async () => {
+      if (Platform.OS === "web") {
+        if ("geolocation" in navigator) {
+          setPermissionStatus("granted");
+        } else {
+          setPermissionStatus("unavailable");
+        }
+        return;
+      }
+
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        
+        if (status === "granted") {
+          setPermissionStatus("granted");
+        } else {
+          setPermissionStatus(status === "denied" ? "denied" : "unknown");
+        }
+      } catch (err) {
+        console.error("[Location] Failed to check permission:", err);
+        setPermissionStatus("unknown");
+      }
+    };
+
+    checkPermission();
+  }, []);
+
+  const locationTool: AgentTool<
+    { includeAddress?: boolean },
+    { 
+      location?: LocationData; 
+      address?: LocationAddress;
+      error?: string;
+    }
+  > = {
+    name: "get_location",
+    description: "Gets the device's current GPS location including coordinates (latitude, longitude) and optionally reverse geocodes to a human-readable address. Only works when location sharing is enabled.",
+    parameters: {
+      includeAddress: {
+        type: "boolean",
+        description: "Whether to include reverse geocoded address (city, region, country). Note: Not available on web platform.",
+        required: false,
+      },
+    },
+    execute: async (params) => {
+      if (!locationSharingAllowed) {
+        return {
+          error: "Location sharing is not enabled. Please enable it in settings.",
+        };
+      }
+
+      if (permissionStatus !== "granted") {
+        return {
+          error: "Location permission not granted. Please grant permission to access location.",
+        };
+      }
+
+      try {
+        if (params.includeAddress && Platform.OS !== "web") {
+          const result = await getCurrentLocationWithAddress();
+          return result;
+        } else {
+          const location = await getCurrentLocation();
+          return { location };
+        }
+      } catch (err) {
+        return {
+          error: `Failed to get location: ${(err as Error).message}`,
+        };
       }
     },
   };
 
   return {
     currentLocation,
+    currentAddress,
     permissionStatus,
     loading,
     error,
@@ -194,6 +286,8 @@ export const [LocationProvider, useLocation] = createContextHook<LocationContext
     setLocationSharingAllowed,
     requestPermission,
     getCurrentLocation,
+    reverseGeocode,
+    getCurrentLocationWithAddress,
     locationTool,
   };
 });

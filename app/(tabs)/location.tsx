@@ -17,13 +17,14 @@ import { useLocation } from "@/lib/providers/location";
 export default function LocationScreen() {
   const {
     currentLocation,
+    currentAddress,
     permissionStatus,
     loading,
     error,
     locationSharingAllowed,
     setLocationSharingAllowed,
     requestPermission,
-    getCurrentLocation,
+    getCurrentLocationWithAddress,
   } = useLocation();
 
   const handleLoad = useCallback(async () => {
@@ -35,12 +36,12 @@ export default function LocationScreen() {
       );
       return;
     }
-    await getCurrentLocation();
-  }, [getCurrentLocation, requestPermission]);
+    await getCurrentLocationWithAddress();
+  }, [getCurrentLocationWithAddress, requestPermission]);
 
   const handleRefresh = useCallback(async () => {
-    await getCurrentLocation();
-  }, [getCurrentLocation]);
+    await getCurrentLocationWithAddress();
+  }, [getCurrentLocationWithAddress]);
 
   if (Platform.OS === "web") {
     return (
@@ -136,7 +137,7 @@ export default function LocationScreen() {
               {currentLocation.longitude.toFixed(6)}
             </Text>
           </View>
-          {currentLocation.altitude !== null && (
+          {currentLocation.altitude != null && (
             <View style={styles.locationRow}>
               <Text style={styles.locationLabel}>Altitude:</Text>
               <Text style={styles.locationValue}>
@@ -144,7 +145,7 @@ export default function LocationScreen() {
               </Text>
             </View>
           )}
-          {currentLocation.accuracy !== null && (
+          {currentLocation.accuracy != null && (
             <View style={styles.locationRow}>
               <Text style={styles.locationLabel}>Accuracy:</Text>
               <Text style={styles.locationValue}>
@@ -152,13 +153,13 @@ export default function LocationScreen() {
               </Text>
             </View>
           )}
-          {currentLocation.city && (
+          {currentAddress?.city && (
             <View style={styles.addressCard}>
               <Text style={styles.addressTitle}>Address</Text>
               <Text style={styles.addressText}>
-                {currentLocation.city}
-                {currentLocation.region ? `, ${currentLocation.region}` : ""}
-                {currentLocation.country ? `, ${currentLocation.country}` : ""}
+                {currentAddress.city}
+                {currentAddress.region ? `, ${currentAddress.region}` : ""}
+                {currentAddress.country ? `, ${currentAddress.country}` : ""}
               </Text>
             </View>
           )}

@@ -235,7 +235,7 @@ export class DolphinCoreML {
     }
   }
   
-  async generate(prompt: string, params?: GenerationParameters): Promise<string> {
+  async generate(prompt: string, params?: GenerationParameters, onToken?: (token: string) => void): Promise<string> {
     if (!this.initialized) {
       throw new Error('Model not initialized. Call initialize() first.');
     }
@@ -253,6 +253,28 @@ export class DolphinCoreML {
       return await this.module.generateStream(prompt, defaultParams);
     } catch (error) {
       console.error('[DolphinCoreML] Generation failed:', error);
+      throw error;
+    }
+  }
+  
+  async generateWithTokens(tokenIds: number[], params?: GenerationParameters): Promise<string> {
+    if (!this.initialized) {
+      throw new Error('Model not initialized. Call initialize() first.');
+    }
+    
+    const defaultParams: GenerationParameters = {
+      maxTokens: 100,
+      temperature: 0.7,
+      topP: 0.9,
+      repetitionPenalty: 1.1,
+      stopSequences: [],
+      ...params
+    };
+    
+    try {
+      return await this.module.generateStream(JSON.stringify(tokenIds), defaultParams);
+    } catch (error) {
+      console.error('[DolphinCoreML] Generation with tokens failed:', error);
       throw error;
     }
   }

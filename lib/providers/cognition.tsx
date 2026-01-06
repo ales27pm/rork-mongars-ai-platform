@@ -355,7 +355,7 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
       if (location.locationSharingAllowed && location.permissionStatus === "granted") {
         availableTools.push("get_location(includeAddress?: boolean) - Get current GPS location");
       }
-      if (camera.cameraSharingAllowed && camera.permissionStatus === "granted") {
+      if (camera.cameraSharingAllowed && camera.cameraPermissionStatus === "granted") {
         availableTools.push("capture_image(source?: 'camera' | 'library') - Capture or select an image");
       }
       
@@ -568,7 +568,7 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
       calendar.calendarSharingAllowed,
       calendar.permissionStatus,
       camera.cameraSharingAllowed,
-      camera.permissionStatus,
+      camera.cameraPermissionStatus,
       contacts.contactSharingAllowed,
       contacts.permissionStatus,
       location.locationSharingAllowed,

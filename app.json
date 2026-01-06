@@ -17,7 +17,10 @@
       "supportsTablet": false,
       "bundleIdentifier": "app.27pm.monGARS",
       "infoPlist": {
-        "UIBackgroundModes": ["audio", "location"],
+        "UIBackgroundModes": [
+          "audio",
+          "location"
+        ],
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to record audio for voice questions and commands.",
         "NSFaceIDUsageDescription": "Allow $(PRODUCT_NAME) to access your Face ID biometric data.",
         "NSContactsUsageDescription": "Allow access to contacts to enable AI assistant to find people in your address book.",
