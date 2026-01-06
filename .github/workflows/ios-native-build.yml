@@ -108,7 +108,6 @@ jobs:
             --non-interactive \
             --wait \
             --message "CI signed build" \
-            --auto-submit \
             --auto-submit-with-profile production
 
       - name: "🗂️ Prepare artifacts"
