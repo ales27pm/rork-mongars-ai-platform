@@ -55,23 +55,22 @@ export class CrossPlatformMLService {
     }
 
     console.log(`[CrossPlatformML] Initializing for platform: ${Platform.OS}`);
-    console.log('[CrossPlatformML] On-device mode: using fallback embeddings');
 
     try {
       if (Platform.OS === 'ios') {
         await this.initializeIOS();
       } else {
-        console.log('[CrossPlatformML] Initializing Transformers for embeddings');
+        console.log('[CrossPlatformML] Initializing Transformers for real embeddings');
         await this.initializeTransformers();
         this.implementation = 'transformers';
       }
 
       this.isInitialized = true;
-      console.log(`[CrossPlatformML] Initialized with ${this.implementation} implementation`);
+      console.log(`[CrossPlatformML] ✓ Initialized with ${this.implementation} implementation`);
       return true;
     } catch (error) {
       console.error('[CrossPlatformML] Initialization failed:', error);
-      console.log('[CrossPlatformML] Falling back to on-device mock implementation');
+      console.log('[CrossPlatformML] Falling back to deterministic embeddings');
       this.implementation = 'fallback';
       this.isInitialized = true;
       return true;
@@ -99,8 +98,8 @@ export class CrossPlatformMLService {
   private async initializeTransformers(): Promise<void> {
     console.log('[CrossPlatformML] Initializing Transformers for Android/Web');
     const { transformerEmbeddings } = await import('@/lib/utils/transformer-embeddings');
-    await transformerEmbeddings.initialize('all-MiniLM-L6-v2');
-    console.log('[CrossPlatformML] Transformers initialized successfully');
+    await transformerEmbeddings.initialize('all-MiniLM-L6-v2', true);
+    console.log('[CrossPlatformML] ✓ Transformers initialized successfully');
   }
 
   async generateEmbedding(text: string, options?: EmbeddingOptions): Promise<number[]> {

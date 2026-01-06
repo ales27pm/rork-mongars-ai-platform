@@ -64,11 +64,49 @@ export class ModelDownloadService {
     return info.exists;
   }
   
-  private async fetchHuggingFaceRepoFiles(repoId: string): Promise<HuggingFaceFile[]> {
-    console.log('[ModelDownloadService] On-device mode: models should be bundled or use fallback embeddings');
-    console.log('[ModelDownloadService] Repo ID:', repoId, '(ignored in on-device mode)');
+  private async fetchHuggingFaceRepoFiles(repoId: string, token?: string): Promise<HuggingFaceFile[]> {
+    console.log('[ModelDownloadService] Fetching repository structure:', repoId);
     
-    return [];
+    try {
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const apiUrl = `https://huggingface.co/api/models/${repoId}/tree/main`;
+      console.log('[ModelDownloadService] API URL:', apiUrl);
+      
+      const response = await fetch(apiUrl, { headers });
+      
+      if (!response.ok) {
+        console.warn('[ModelDownloadService] API request failed, using alternative method');
+        return this.fetchHuggingFaceRepoFilesAlternative(repoId);
+      }
+      
+      const files = await response.json();
+      
+      if (!Array.isArray(files)) {
+        console.warn('[ModelDownloadService] Unexpected API response, using alternative');
+        return this.fetchHuggingFaceRepoFilesAlternative(repoId);
+      }
+      
+      const coreMLFiles = files
+        .filter((f: any) => f.type === 'file' && f.path)
+        .map((f: any) => ({
+          path: f.path,
+          size: f.size || 0,
+          lfs: f.lfs,
+        }));
+      
+      console.log(`[ModelDownloadService] Found ${coreMLFiles.length} files`);
+      return coreMLFiles;
+    } catch (error) {
+      console.error('[ModelDownloadService] Failed to fetch repo files:', error);
+      return this.fetchHuggingFaceRepoFilesAlternative(repoId);
+    }
   }
 
   private async fetchHuggingFaceRepoFilesAlternative(repoId: string): Promise<HuggingFaceFile[]> {
@@ -177,22 +215,140 @@ export class ModelDownloadService {
     model: LLMModel,
     onProgress?: (progress: DownloadProgress) => void
   ): Promise<boolean> {
-    console.log('[ModelDownloadService] On-device mode: external downloads disabled');
-    console.log('[ModelDownloadService] App uses bundled models and fallback embeddings');
-    
-    if (onProgress) {
-      onProgress({
-        modelId: model.id,
-        bytesDownloaded: model.size,
-        totalBytes: model.size,
-        percentage: 100,
-        speed: 0,
-        estimatedTimeRemaining: 0,
-        status: 'completed',
-      });
+    if (Platform.OS === 'web') {
+      console.warn('[ModelDownloadService] Downloads not supported on web');
+      return false;
     }
     
-    return false;
+    console.log(`[ModelDownloadService] Starting download: ${model.name}`);
+    console.log(`[ModelDownloadService] Size: ${this.formatBytes(model.size)}`);
+    
+    try {
+      await this.ensureModelDirectory();
+      
+      const isAlreadyDownloaded = await this.isModelDownloaded(model.id);
+      if (isAlreadyDownloaded) {
+        console.log('[ModelDownloadService] Model already downloaded');
+        if (onProgress) {
+          onProgress({
+            modelId: model.id,
+            bytesDownloaded: model.size,
+            totalBytes: model.size,
+            percentage: 100,
+            speed: 0,
+            estimatedTimeRemaining: 0,
+            status: 'completed',
+          });
+        }
+        return true;
+      }
+      
+      const availableSpace = await this.getDiskSpaceAvailable();
+      if (availableSpace < model.size * 1.5) {
+        console.error('[ModelDownloadService] Insufficient disk space');
+        console.error(`[ModelDownloadService] Required: ${this.formatBytes(model.size * 1.5)}, Available: ${this.formatBytes(availableSpace)}`);
+        return false;
+      }
+      
+      if (!model.huggingFaceRepo) {
+        console.error('[ModelDownloadService] No Hugging Face repository specified');
+        return false;
+      }
+      
+      const files = await this.fetchHuggingFaceRepoFiles(model.huggingFaceRepo);
+      
+      if (files.length === 0) {
+        console.error('[ModelDownloadService] No files found in repository');
+        return false;
+      }
+      
+      const modelPath = this.getModelPath(model.id);
+      const tempDir = `${this.getModelDirectory()}temp_${model.id}/`;
+      
+      await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
+      
+      const startTime = Date.now();
+      let totalBytesDownloaded = 0;
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const localFilePath = `${tempDir}${file.path}`;
+        const localFileDir = localFilePath.substring(0, localFilePath.lastIndexOf('/'));
+        
+        await FileSystem.makeDirectoryAsync(localFileDir, { intermediates: true });
+        
+        const success = await this.downloadHuggingFaceFile(
+          model.huggingFaceRepo!,
+          file.path,
+          localFilePath,
+          (bytes) => {
+            totalBytesDownloaded += bytes;
+            if (onProgress) {
+              onProgress(
+                this.calculateProgress(
+                  {
+                    totalBytesWritten: totalBytesDownloaded,
+                    totalBytesExpectedToWrite: model.size,
+                  },
+                  model.id,
+                  startTime
+                )
+              );
+            }
+          }
+        );
+        
+        if (!success) {
+          console.error(`[ModelDownloadService] Failed to download file: ${file.path}`);
+          await FileSystem.deleteAsync(tempDir, { idempotent: true });
+          return false;
+        }
+        
+        console.log(`[ModelDownloadService] Progress: ${i + 1}/${files.length} files`);
+      }
+      
+      const mlpackagePath = `${tempDir}model.mlpackage`;
+      const mlpackageExists = await FileSystem.getInfoAsync(mlpackagePath);
+      
+      if (mlpackageExists.exists) {
+        await FileSystem.moveAsync({
+          from: mlpackagePath,
+          to: modelPath,
+        });
+      } else {
+        await FileSystem.moveAsync({
+          from: tempDir,
+          to: modelPath,
+        });
+      }
+      
+      await FileSystem.deleteAsync(tempDir, { idempotent: true });
+      
+      const verified = await this.verifyDownload(model.id, modelPath);
+      
+      if (verified) {
+        console.log(`[ModelDownloadService] ✓ Download complete: ${model.name}`);
+        if (onProgress) {
+          onProgress({
+            modelId: model.id,
+            bytesDownloaded: model.size,
+            totalBytes: model.size,
+            percentage: 100,
+            speed: 0,
+            estimatedTimeRemaining: 0,
+            status: 'completed',
+          });
+        }
+        return true;
+      } else {
+        console.error('[ModelDownloadService] Verification failed');
+        await FileSystem.deleteAsync(modelPath, { idempotent: true });
+        return false;
+      }
+    } catch (error) {
+      console.error('[ModelDownloadService] Download failed:', error);
+      return false;
+    }
   }
   
   async pauseDownload(modelId: string): Promise<void> {

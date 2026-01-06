@@ -9,6 +9,7 @@ export interface LLMModel {
   parameters: string;
   contextLength: number;
   downloadUrl?: string;
+  huggingFaceRepo?: string;
   localPath?: string;
   isDownloaded: boolean;
   isLoaded: boolean;
@@ -103,6 +104,7 @@ export const AVAILABLE_MODELS: LLMModel[] = [
     parameters: '3B',
     contextLength: 8192,
     downloadUrl: 'hf://ales27pm/Dolphin3.0-CoreML',
+    huggingFaceRepo: 'ales27pm/Dolphin3.0-CoreML',
     isDownloaded: false,
     isLoaded: false,
     isDownloading: false,
@@ -132,6 +134,7 @@ export const AVAILABLE_MODELS: LLMModel[] = [
     parameters: '1B',
     contextLength: 8192,
     downloadUrl: 'hf://apple/coreml-llama-3.2-1b-instruct-4bit',
+    huggingFaceRepo: 'apple/coreml-llama-3.2-1b-instruct-4bit',
     isDownloaded: false,
     isLoaded: false,
     isDownloading: false,
@@ -161,6 +164,7 @@ export const AVAILABLE_MODELS: LLMModel[] = [
     parameters: '3B',
     contextLength: 8192,
     downloadUrl: 'hf://apple/coreml-llama-3.2-3b-instruct-4bit',
+    huggingFaceRepo: 'apple/coreml-llama-3.2-3b-instruct-4bit',
     isDownloaded: false,
     isLoaded: false,
     isDownloading: false,

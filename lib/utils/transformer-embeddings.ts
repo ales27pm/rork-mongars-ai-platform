@@ -55,8 +55,8 @@ export class TransformerEmbeddingService {
     this.isInitializing = true;
     this.modelConfig = MODELS[modelName];
 
-    if (!enableRealModel) {
-      console.log('[TransformerEmbeddings] Real model disabled, using fallback embeddings');
+    if (!enableRealModel && Platform.OS !== 'ios') {
+      console.log('[TransformerEmbeddings] Real model disabled for non-iOS, using fallback embeddings');
       this.isInitialized = true;
       this.isInitializing = false;
       return true;
@@ -69,27 +69,35 @@ export class TransformerEmbeddingService {
       
       env.allowLocalModels = false;
       env.allowRemoteModels = true;
+      env.useBrowserCache = true;
       
       if (Platform.OS === 'web') {
-        env.backends.onnx.wasm.numThreads = 1;
+        env.backends.onnx.wasm.numThreads = navigator.hardwareConcurrency || 4;
+        env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/';
+      } else if (Platform.OS === 'android') {
+        env.backends.onnx.wasm.numThreads = 2;
       }
       
       console.log('[TransformerEmbeddings] Loading transformer pipeline...');
+      console.log('[TransformerEmbeddings] Model will be downloaded on first use (~25MB)');
       
       this.pipeline = await pipeline('feature-extraction', this.modelConfig.name, {
         quantized: true,
         progress_callback: (progress: any) => {
           if (progress.status === 'progress') {
             const percent = Math.round((progress.loaded / progress.total) * 100) || 0;
-            console.log(`[TransformerEmbeddings] Download progress: ${percent}%`);
+            console.log(`[TransformerEmbeddings] Download progress: ${percent}% - ${progress.file}`);
           } else if (progress.status === 'done') {
-            console.log(`[TransformerEmbeddings] Downloaded: ${progress.file}`);
+            console.log(`[TransformerEmbeddings] ✓ Downloaded: ${progress.file}`);
+          } else if (progress.status === 'initiate') {
+            console.log(`[TransformerEmbeddings] Starting download: ${progress.file}`);
           }
         },
       });
       
       this.isInitialized = true;
-      console.log('[TransformerEmbeddings] Initialization complete with real model');
+      console.log('[TransformerEmbeddings] ✓ Initialization complete with real model');
+      console.log(`[TransformerEmbeddings] Model: ${this.modelConfig.name}, Dimension: ${this.modelConfig.dimension}`);
       return true;
     } catch (error) {
       console.error('[TransformerEmbeddings] Initialization failed:', error);

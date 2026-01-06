@@ -404,10 +404,14 @@ public class DolphinCoreMLModule: Module {
     let normalized = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
     var tokens: [Int32] = [128000]
     
-    let words = normalized.components(separatedBy: .whitespaces)
-    for word in words {
-      let wordHash = abs(word.hashValue) % 128000
-      tokens.append(Int32(wordHash))
+    let encoder = JSONEncoder()
+    let data = try encoder.encode(["text": normalized])
+    
+    if let jsonString = String(data: data, encoding: .utf8) {
+      for char in jsonString {
+        let charCode = Int32(char.unicodeScalars.first?.value ?? 0)
+        tokens.append(charCode % 128000)
+      }
     }
     
     return tokens
@@ -416,11 +420,17 @@ public class DolphinCoreMLModule: Module {
   private func decodeToken(_ tokenId: Int32) -> String {
     if tokenId == 128000 { return "" }
     if tokenId == 128001 { return "" }
+    if tokenId == 128009 { return "" }
     
-    let chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,:;!?-'"
-    let index = Int(tokenId) % chars.count
-    let char = chars[chars.index(chars.startIndex, offsetBy: index)]
-    return String(char)
+    if tokenId < 32 || tokenId > 126 {
+      return ""
+    }
+    
+    if let scalar = UnicodeScalar(Int(tokenId)) {
+      return String(Character(scalar))
+    }
+    
+    return ""
   }
   
   private func createModelInput(tokenIds: [Int32]) throws -> MLFeatureProvider {
