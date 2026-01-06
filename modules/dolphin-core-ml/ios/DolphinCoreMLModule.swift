@@ -289,7 +289,9 @@ public class DolphinCoreMLModule: Module {
         throw NSError(domain: "DolphinCoreML", code: -20, userInfo: [NSLocalizedDescriptionKey: "MLX engine requires iOS 18"])
       }
 
-      if !(try await self.ensureMLXEngineInitialized(options: options ?? [:])) {
+      var mlxOptions = options ?? [:]
+      mlxOptions["engine"] = "mlx"
+      if !(try await self.ensureMLXEngineInitialized(options: mlxOptions)) {
         throw NSError(domain: "DolphinCoreML", code: -21, userInfo: [NSLocalizedDescriptionKey: "MLX engine failed to initialize"])
       }
 
