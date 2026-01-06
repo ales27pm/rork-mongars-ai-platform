@@ -1,23 +1,26 @@
-diff --git a/node_modules/expo-modules-core/ios/JSI/EXJavaScriptWeakObject.mm b/node_modules/expo-modules-core/ios/JSI/EXJavaScriptWeakObject.mm
-index 54a9c31..439e339 100644
---- a/node_modules/expo-modules-core/ios/JSI/EXJavaScriptWeakObject.mm
-+++ b/node_modules/expo-modules-core/ios/JSI/EXJavaScriptWeakObject.mm
-@@ -3,6 +3,26 @@
- #import <ExpoModulesCore/EXJSIUtils.h>
- #import <ExpoModulesCore/EXJavaScriptWeakObject.h>
+diff --git a/node_modules/expo-modules-core/ios/JSI/EXJSIConversions.h b/node_modules/expo-modules-core/ios/JSI/EXJSIConversions.h
+index 6d9bcaa..55d34a7 100644
+--- a/node_modules/expo-modules-core/ios/JSI/EXJSIConversions.h
++++ b/node_modules/expo-modules-core/ios/JSI/EXJSIConversions.h
+@@ -1,51 +1,31 @@
+-// Copyright 2018-present 650 Industries. All rights reserved.
++#pragma once
  
-+// React Native 0.81+ moved/renamed some headers/pods.
-+// ExpoModulesCore references facebook::react::CallInvoker in this file, but depending
-+// on the RN CocoaPods layout, the declaration may not be visible.
-+//
-+// Prefer including the header if available; otherwise forward-declare so the
-+// shared_ptr/weak_ptr usage can compile.
+-#ifdef __cplusplus
+-
+-#import <Foundation/Foundation.h>
+-
+-#import <jsi/jsi.h>
+-
+-#import <React/RCTBridgeModule.h>
 +#if __has_include(<ReactCommon/CallInvoker.h>)
-+#include <ReactCommon/CallInvoker.h>
+ #import <ReactCommon/CallInvoker.h>
 +#elif __has_include(<React-callinvoker/ReactCommon/CallInvoker.h>)
-+#include <React-callinvoker/ReactCommon/CallInvoker.h>
++#import <React-callinvoker/ReactCommon/CallInvoker.h>
 +#elif __has_include(<ReactCommon/callinvoker/CallInvoker.h>)
-+#include <ReactCommon/callinvoker/CallInvoker.h>
++#import <ReactCommon/callinvoker/CallInvoker.h>
++#elif __has_include(<react/nativemodule/core/ReactCommon/CallInvoker.h>)
++#import <react/nativemodule/core/ReactCommon/CallInvoker.h>
 +#else
 +namespace facebook {
 +namespace react {
@@ -25,7 +28,233 @@ index 54a9c31..439e339 100644
 +} // namespace react
 +} // namespace facebook
 +#endif
++#include <jsi/jsi.h>
+ 
+-using namespace facebook;
+-using namespace react;
+-
+-@class EXJavaScriptValue;
+-@class EXJavaScriptRuntime;
+-
++namespace jsi = facebook::jsi;
++namespace react = facebook::react;
+ namespace expo
+ {
+-
+-    jsi::Value convertNSNumberToJSIBoolean(jsi::Runtime &runtime, NSNumber *value);
+-
+-    jsi::Value convertNSNumberToJSINumber(jsi::Runtime &runtime, NSNumber *value);
+-
+-    jsi::String convertNSStringToJSIString(jsi::Runtime &runtime, NSString *value);
+-
+-    jsi::String convertNSURLToJSIString(jsi::Runtime &runtime, NSURL *value);
+-
+-    jsi::Object convertNSDictionaryToJSIObject(jsi::Runtime &runtime, NSDictionary *value);
+-
+-    jsi::Array convertNSArrayToJSIArray(jsi::Runtime &runtime, NSArray *value);
+-
+-    std::vector<jsi::Value> convertNSArrayToStdVector(jsi::Runtime &runtime, NSArray *value);
+-
+-    jsi::Value convertObjCObjectToJSIValue(jsi::Runtime &runtime, id value);
+-
+-    NSString *convertJSIStringToNSString(jsi::Runtime &runtime, const jsi::String &value);
+-
+-    NSArray *convertJSIArrayToNSArray(jsi::Runtime &runtime, const jsi::Array &value, std::shared_ptr<CallInvoker> jsInvoker);
+-
+-    NSArray<EXJavaScriptValue *> *convertJSIValuesToNSArray(EXJavaScriptRuntime *runtime, const jsi::Value *values, size_t count);
+-
+-    NSDictionary *convertJSIObjectToNSDictionary(jsi::Runtime &runtime, const jsi::Object &value, std::shared_ptr<CallInvoker> jsInvoker);
+-
+-    id convertJSIValueToObjCObject(jsi::Runtime &runtime, const jsi::Value &value, std::shared_ptr<CallInvoker> jsInvoker);
+-
+-    RCTResponseSenderBlock convertJSIFunctionToCallback(jsi::Runtime &runtime, const jsi::Function &value, std::shared_ptr<CallInvoker> jsInvoker);
+-
++  std::shared_ptr<jsi::Array> convertNSArrayToJSIArray(jsi::Runtime &runtime, NSArray *array);
++  std::shared_ptr<jsi::Object> convertNSDictionaryToJSIObject(jsi::Runtime &runtime, NSDictionary *dictionary);
++  std::shared_ptr<jsi::Value> convertObjCObjectToJSIValue(jsi::Runtime &runtime, id value);
++  RCTResponseSenderBlock convertJSIFunctionToCallback(jsi::Runtime &runtime, const jsi::Function &value, std::shared_ptr<CallInvoker> jsInvoker);
+ } // namespace expo
+ 
+-#endif
++#import <ExpoModulesCore/EXJavaScriptRuntime.h>
++#import <ExpoModulesCore/EXJavaScriptObject.h>
+diff --git a/node_modules/expo-modules-core/ios/JSI/EXJSIUtils.h b/node_modules/expo-modules-core/ios/JSI/EXJSIUtils.h
+index 407f57f..0881c8a 100644
+--- a/node_modules/expo-modules-core/ios/JSI/EXJSIUtils.h
++++ b/node_modules/expo-modules-core/ios/JSI/EXJSIUtils.h
+@@ -6,7 +6,28 @@
+ 
+ #import <jsi/jsi.h>
+ #import <React/RCTBridgeModule.h>
++#if __has_include(<ReactCommon/TurboModuleUtils.h>)
+ #import <ReactCommon/TurboModuleUtils.h>
++#elif __has_include(<react/nativemodule/core/ReactCommon/TurboModuleUtils.h>)
++#import <react/nativemodule/core/ReactCommon/TurboModuleUtils.h>
++#endif
 +
- @implementation EXJavaScriptWeakObject {
-   /**
-    Pointer to the `EXJavaScriptRuntime` wrapper.
++#if __has_include(<ReactCommon/CallInvoker.h>)
++#import <ReactCommon/CallInvoker.h>
++#elif __has_include(<React-callinvoker/ReactCommon/CallInvoker.h>)
++#import <React-callinvoker/ReactCommon/CallInvoker.h>
++#elif __has_include(<ReactCommon/callinvoker/CallInvoker.h>)
++#import <ReactCommon/callinvoker/CallInvoker.h>
++#elif __has_include(<react/nativemodule/core/ReactCommon/CallInvoker.h>)
++#import <react/nativemodule/core/ReactCommon/CallInvoker.h>
++#else
++namespace facebook {
++namespace react {
++class CallInvoker;
++class Promise;
++} // namespace react
++} // namespace facebook
++#endif
+ #import <ExpoModulesCore/ObjectDeallocator.h>
+ 
+ namespace jsi = facebook::jsi;
+@@ -46,11 +67,8 @@ namespace expo
+ #pragma mark - Errors
+ 
+     jsi::Value makeCodedError(jsi::Runtime &runtime, NSString *code, NSString *message);
+-
+ } // namespace expo
+-
+ #endif
+-
+ #import <ExpoModulesCore/EXJavaScriptObject.h>
+ #import <ExpoModulesCore/EXJavaScriptRuntime.h>
+ 
+@@ -58,7 +76,6 @@ NS_SWIFT_NAME(JSIUtils)
+ @interface EXJSIUtils : NSObject
+ 
+ + (nonnull EXJavaScriptObject *)createNativeModuleObject:(nonnull EXJavaScriptRuntime *)runtime;
+-
+ + (void)emitEvent:(nonnull NSString *)eventName
+          toObject:(nonnull EXJavaScriptObject *)object
+     withArguments:(nonnull NSArray<id> *)arguments
+diff --git a/node_modules/expo-modules-core/ios/JSI/EXJavaScriptRuntime.h b/node_modules/expo-modules-core/ios/JSI/EXJavaScriptRuntime.h
+index a38de45..051feed 100644
+--- a/node_modules/expo-modules-core/ios/JSI/EXJavaScriptRuntime.h
++++ b/node_modules/expo-modules-core/ios/JSI/EXJavaScriptRuntime.h
+@@ -3,6 +3,20 @@
+ #import <React/RCTBridgeModule.h>
+ #import <React/RCTCallInvoker.h>
+ 
++#if __has_include(<ReactCommon/CallInvoker.h>)
++#import <ReactCommon/CallInvoker.h>
++#elif __has_include(<React-callinvoker/ReactCommon/CallInvoker.h>)
++#import <React-callinvoker/ReactCommon/CallInvoker.h>
++#elif __has_include(<ReactCommon/callinvoker/CallInvoker.h>)
++#import <ReactCommon/callinvoker/CallInvoker.h>
++#elif __has_include(<react/nativemodule/core/ReactCommon/CallInvoker.h>)
++#import <react/nativemodule/core/ReactCommon/CallInvoker.h>
++#else
++namespace facebook {
++namespace react { class CallInvoker; }
++} // namespace facebook
++#endif
++
+ #import <Foundation/Foundation.h>
+ #import <ExpoModulesCore/EXJavaScriptValue.h>
+ #import <ExpoModulesCore/EXJavaScriptObject.h>
+@@ -81,8 +95,8 @@ NS_SWIFT_NAME(JavaScriptRuntime)
+  \return A JavaScript function represented as a `JavaScriptObject`.
+  */
+ - (nonnull EXJavaScriptObject *)createSyncFunction:(nonnull NSString *)name
+-                                         argsCount:(NSInteger)argsCount
+-                                             block:(nonnull JSSyncFunctionBlock)block NS_REFINED_FOR_SWIFT;
++                                           argsCount:(NSInteger)argsCount
++                                               block:(nonnull JSSyncFunctionBlock)block NS_REFINED_FOR_SWIFT;
+ 
+ /**
+  Creates an asynchronous host function that runs given block when it's called.
+@@ -91,8 +105,8 @@ NS_SWIFT_NAME(JavaScriptRuntime)
+  \return A JavaScript function represented as a `JavaScriptObject`.
+  */
+ - (nonnull EXJavaScriptObject *)createAsyncFunction:(nonnull NSString *)name
+-                                          argsCount:(NSInteger)argsCount
+-                                              block:(nonnull JSAsyncFunctionBlock)block;
++                                            argsCount:(NSInteger)argsCount
++                                                block:(nonnull JSAsyncFunctionBlock)block;
+ 
+ #pragma mark - Classes
+ 
+@@ -109,25 +123,66 @@ typedef void (^ClassConstructorBlock)(EXJavaScriptObject *_Nonnull thisValue, NS
+ #pragma mark - Shared objects
+ 
+ - (nonnull EXJavaScriptObject *)createSharedObjectClass:(nonnull NSString *)name
+-                                            constructor:(nonnull ClassConstructorBlock)constructor;
++                                          constructor:(nonnull ClassConstructorBlock)constructor;
+ 
+ #pragma mark - Shared refs
+ 
+ - (nonnull EXJavaScriptObject *)createSharedRefClass:(nonnull NSString *)name
+-                                         constructor:(nonnull ClassConstructorBlock)constructor;
++                                       constructor:(nonnull ClassConstructorBlock)constructor;
+ 
+ #pragma mark - Script evaluation
+ 
+-/**
+- Evaluates given JavaScript source code.
+- */
+-- (nonnull EXJavaScriptValue *)evaluateScript:(nonnull NSString *)scriptSource NS_REFINED_FOR_SWIFT;
+-
+-#pragma mark - Runtime execution
+-
+-/**
+- Schedules a block to be executed with granted synchronized access to the JS runtime.
+- */
+-- (void)schedule:(nonnull JSRuntimeExecutionBlock)block priority:(int)priority NS_REFINED_FOR_SWIFT;
++typedef jsi::Value (^JSEvaluationWithSourceBlock)(jsi::Runtime &runtime,
++                                                  std::shared_ptr<react::CallInvoker> jsCallInvoker,
++                                                  const jsi::Value *args,
++                                                  size_t count);
++
++typedef jsi::Value (^JSEvaluationWithStringBlock)(jsi::Runtime &runtime,
++                                                  std::shared_ptr<react::CallInvoker> jsCallInvoker,
++                                                  NSString *source);
++
++typedef jsi::Value (^JSEvaluationBlock)(jsi::Runtime &runtime,
++                                        std::shared_ptr<react::CallInvoker> jsCallInvoker);
++
++- (nonnull EXJavaScriptValue *)evaluateScript:(nonnull NSString *)script;
++- (nonnull EXJavaScriptValue *)evaluateScript:(nonnull NSString *)script
++                                 withSourceURL:(nullable NSURL *)sourceURL;
++- (nonnull EXJavaScriptValue *)evaluateScript:(nonnull NSString *)script
++                                 withSourceURL:(nullable NSURL *)sourceURL
++                                     onSuccess:(nullable void (^)(void))onSuccess
++                                       onError:(nullable void (^)(NSError *error))onError;
++
++- (nonnull EXJavaScriptValue *)evaluateScript:(nonnull NSString *)script
++                                 withSourceURL:(nullable NSURL *)sourceURL
++                                onRuntimeSetup:(nullable JSEvaluationWithSourceBlock)onRuntimeSetup
++                                     onSuccess:(nullable void (^)(void))onSuccess
++                                       onError:(nullable void (^)(NSError *error))onError;
++
++- (nonnull EXJavaScriptValue *)evaluateScript:(nonnull NSString *)script
++                                 withSourceURL:(nullable NSURL *)sourceURL
++                                onRuntimeSetup:(nullable JSEvaluationWithStringBlock)onRuntimeSetup
++                                     onSuccess:(nullable void (^)(void))onSuccess
++                                       onError:(nullable void (^)(NSError *error))onError;
++
++- (nonnull EXJavaScriptValue *)evaluateScript:(nonnull NSString *)script
++                                 onRuntimeSetup:(nullable JSEvaluationBlock)onRuntimeSetup
++                                      onSuccess:(nullable void (^)(void))onSuccess
++                                        onError:(nullable void (^)(NSError *error))onError;
++
++- (nonnull EXJavaScriptValue *)evaluateScript:(nonnull NSData *)scriptData;
++- (nonnull EXJavaScriptValue *)evaluateScript:(nonnull NSData *)scriptData
++                                  withSourceURL:(nullable NSURL *)sourceURL;
++
++#pragma mark - Runtime inspection
++
++- (nonnull EXJavaScriptObject *)globalObject;
++- (nullable EXJavaScriptValue *)get:(nonnull NSString *)name;
++- (void)set:(nonnull NSString *)name value:(nonnull EXJavaScriptValue *)value;
++
++#pragma mark - Function factories
++
++- (nonnull EXJavaScriptObject *)createFunction:(nonnull NSString *)name
++                                     argsCount:(NSInteger)argsCount
++                                         block:(nonnull JSHostFunctionBlock)block;
+ 
+ @end
