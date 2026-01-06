@@ -79,7 +79,7 @@ jobs:
           jq \
             --arg keyId "$ASC_API_KEY_KEY_ID" \
             --arg issuerId "$ASC_API_KEY_ISSUER_ID" \
-            '.submit.production.ios = {ascApiKey: {path: "credentials/ios/appstoreconnect.p8", keyId: $keyId, issuerId: $issuerId}}' eas.json > eas.tmp && mv eas.tmp eas.json
+            '.submit.production.ios |= (. // {}) | .submit.production.ios.ascApiKeyPath = "credentials/ios/appstoreconnect.p8" | .submit.production.ios.ascApiKeyId = $keyId | .submit.production.ios.ascApiKeyIssuerId = $issuerId' eas.json > eas.tmp && mv eas.tmp eas.json
 
       - name: "🔗 Configure EAS project"
         env:
