@@ -344,7 +344,7 @@ public class DolphinCoreMLModule: Module {
     do {
       if options["engine"] as? String == "mlx" || options["preferMLX"] as? Bool == true {
         let config = buildMLXConfig(from: options)
-        if !mlxEngine.isReady(for: config) {
+        if !(await mlxEngine.isReady(for: config)) {
           mlxEngineConfig = config
           _ = try await mlxEngine.initialize(config: mlxEngineConfig)
         }
