@@ -37,7 +37,8 @@ let package = Package(
             path: ".",
             sources: [
                 "DolphinCoreMLModule.swift",
-                "MLXBridge.swift"
+                "MLXBridge.swift",
+                "MLXEngine.swift"
             ]
         )
     ]
