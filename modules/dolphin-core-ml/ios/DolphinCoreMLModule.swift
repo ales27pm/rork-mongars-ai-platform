@@ -297,7 +297,7 @@ public class DolphinCoreMLModule: Module {
       }
 
       let start = Date()
-      let embeddings = try await self.mlxEngine.encodeBatch(texts, options: options ?? [:])
+      let embeddings = try await self.mlxEngine.encodeBatch(texts, options: mlxOptions)
       await DolphinCoreMLState.shared.recordMLXEncoding(duration: Date().timeIntervalSince(start))
       return embeddings
     }
