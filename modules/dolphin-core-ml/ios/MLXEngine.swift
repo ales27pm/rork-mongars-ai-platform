@@ -157,6 +157,9 @@ public actor MLXEngine {
       let floatValues = pooled.asArray(Float.self)
 
       var doubleValues = floatValues.prefix(targetDim).map { Double($0) }
+      if doubleValues.count < targetDim {
+        doubleValues.append(contentsOf: repeatElement(0.0, count: targetDim - doubleValues.count))
+      }
 
       if normalize {
         let norm = sqrt(doubleValues.reduce(0) { $0 + $1 * $1 })
