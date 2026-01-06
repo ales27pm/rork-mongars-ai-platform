@@ -1,0 +1,34 @@
+diff --git a/node_modules/expo-updates/ios/EXUpdates/AppController.swift b/node_modules/expo-updates/ios/EXUpdates/AppController.swift
+index 0000000..1111111 100644
+--- a/node_modules/expo-updates/ios/EXUpdates/AppController.swift
++++ b/node_modules/expo-updates/ios/EXUpdates/AppController.swift
+@@
+-  public static var sharedInstance: InternalAppControllerInterface {
+-    assert(_sharedInstance != nil, "AppController.sharedInstace was called before the module was initialized")
+-    return _sharedInstance!
+-  }
++  public static var sharedInstance: InternalAppControllerInterface {
++    if let existingInstance = _sharedInstance {
++      return existingInstance
++    }
++
++    // Gracefully initialize a controller if consumers access sharedInstance early.
++    initializeWithoutStarting()
++
++    if let initialized = _sharedInstance {
++      return initialized
++    }
++
++    // As a final fallback (e.g., missing Expo.plist), return a disabled controller so
++    // release builds do not crash on a nil force unwrap.
++    let fallbackError = UpdatesError.appControllerInitializationError(
++      cause: NSError(
++        domain: "EXUpdatesAppController",
++        code: 1,
++        userInfo: [NSLocalizedDescriptionKey: "AppController.sharedInstance accessed before initialization"]
++      )
++    )
++    let disabledController = DisabledAppController(error: fallbackError)
++    _sharedInstance = disabledController
++    return disabledController
++  }
