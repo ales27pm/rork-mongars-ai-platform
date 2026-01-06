@@ -43,7 +43,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.mongars",
+      "package": "app.27pm.mongars",
       "permissions": [
         "android.permission.VIBRATE",
         "RECORD_AUDIO",
