@@ -67,63 +67,131 @@ export class ModelDownloadService {
   private async fetchHuggingFaceRepoFiles(repoId: string, token?: string): Promise<HuggingFaceFile[]> {
     console.log('[ModelDownloadService] Fetching repository structure:', repoId);
     
-    return this.fetchHuggingFaceRepoFilesAlternative(repoId);
+    try {
+      const apiUrl = `https://huggingface.co/api/models/${repoId}/tree/main`;
+      console.log('[ModelDownloadService] Fetching from HF API:', apiUrl);
+      
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(10000),
+      });
+      
+      if (!response.ok) {
+        console.log('[ModelDownloadService] API fetch failed, using fallback discovery');
+        return this.fetchHuggingFaceRepoFilesAlternative(repoId);
+      }
+      
+      const data = await response.json();
+      console.log('[ModelDownloadService] Received file tree with', data.length, 'items');
+      
+      const mlpackageFiles = data
+        .filter((item: any) => 
+          item.type === 'file' && 
+          (item.path.includes('.mlpackage') || 
+           item.path.endsWith('.mlmodel') ||
+           item.path.endsWith('.bin') ||
+           item.path.endsWith('Manifest.json'))
+        )
+        .map((item: any) => ({
+          path: item.path,
+          size: item.size || 0,
+          lfs: item.lfs ? {
+            oid: item.lfs.oid,
+            size: item.lfs.size,
+            pointerSize: item.lfs.pointerSize,
+          } : undefined,
+        }));
+      
+      if (mlpackageFiles.length > 0) {
+        console.log('[ModelDownloadService] Found', mlpackageFiles.length, 'mlpackage files');
+        return mlpackageFiles;
+      }
+      
+      console.log('[ModelDownloadService] No mlpackage files found, using fallback');
+      return this.fetchHuggingFaceRepoFilesAlternative(repoId);
+    } catch (error) {
+      console.error('[ModelDownloadService] API fetch error:', error);
+      return this.fetchHuggingFaceRepoFilesAlternative(repoId);
+    }
   }
 
   private async fetchHuggingFaceRepoFilesAlternative(repoId: string): Promise<HuggingFaceFile[]> {
-    try {
-      console.log('[ModelDownloadService] Using direct file discovery for:', repoId);
+    console.log('[ModelDownloadService] Using direct file discovery for:', repoId);
+    
+    const possibleStructures = [
+      [
+        'model.mlpackage/Manifest.json',
+        'model.mlpackage/Data/com.apple.CoreML/model.mlmodel',
+        'model.mlpackage/Data/com.apple.CoreML/weights/weight.bin',
+      ],
+      [
+        'coreml/model.mlpackage/Manifest.json',
+        'coreml/model.mlpackage/Data/com.apple.CoreML/model.mlmodel',
+        'coreml/model.mlpackage/Data/com.apple.CoreML/weights/weight.bin',
+      ],
+      [
+        'mlpackage/Manifest.json',
+        'mlpackage/Data/com.apple.CoreML/model.mlmodel',
+        'mlpackage/Data/com.apple.CoreML/weights/weight.bin',
+      ],
+    ];
+    
+    for (const structure of possibleStructures) {
+      const testUrl = `https://huggingface.co/${repoId}/resolve/main/${structure[0]}`;
+      console.log('[ModelDownloadService] Testing structure:', structure[0]);
       
-      const possibleStructures = [
-        [
-          'model.mlpackage/Manifest.json',
-          'model.mlpackage/Data/com.apple.CoreML/model.mlmodel',
-          'model.mlpackage/Data/com.apple.CoreML/weights/weight.bin',
-        ],
-        [
-          'coreml/model.mlpackage/Manifest.json',
-          'coreml/model.mlpackage/Data/com.apple.CoreML/model.mlmodel',
-          'coreml/model.mlpackage/Data/com.apple.CoreML/weights/weight.bin',
-        ],
-        [
-          'mlpackage/Manifest.json',
-          'mlpackage/Data/com.apple.CoreML/model.mlmodel',
-          'mlpackage/Data/com.apple.CoreML/weights/weight.bin',
-        ],
-      ];
-      
-      for (const structure of possibleStructures) {
-        const testUrl = `https://huggingface.co/${repoId}/resolve/main/${structure[0]}`;
-        console.log('[ModelDownloadService] Testing structure:', structure[0]);
+      try {
+        const testResponse = await fetch(testUrl, { 
+          method: 'HEAD',
+          signal: AbortSignal.timeout(5000)
+        });
         
-        try {
-          const testResponse = await fetch(testUrl, { 
-            method: 'HEAD',
-            signal: AbortSignal.timeout(5000)
-          });
+        if (testResponse.ok) {
+          console.log('[ModelDownloadService] Found valid structure, fetching sizes...');
           
-          if (testResponse.ok) {
-            console.log('[ModelDownloadService] Found valid structure');
-            return structure.map(path => ({
-              path,
-              size: 0,
-            }));
-          }
-        } catch {
-          console.log('[ModelDownloadService] Structure not found, trying next...');
-          continue;
+          const filesWithSizes = await Promise.all(
+            structure.map(async (path) => {
+              try {
+                const fileUrl = `https://huggingface.co/${repoId}/resolve/main/${path}`;
+                const headResponse = await fetch(fileUrl, { 
+                  method: 'HEAD',
+                  signal: AbortSignal.timeout(5000)
+                });
+                
+                const size = headResponse.headers.get('content-length');
+                console.log(`[ModelDownloadService] ${path}: ${size || 'unknown'} bytes`);
+                
+                return {
+                  path,
+                  size: size ? parseInt(size, 10) : 0,
+                };
+              } catch {
+                return {
+                  path,
+                  size: 0,
+                };
+              }
+            })
+          );
+          
+          return filesWithSizes;
         }
+      } catch {
+        console.log('[ModelDownloadService] Structure not found, trying next...');
+        continue;
       }
-      
-      console.log('[ModelDownloadService] Using default CoreML structure');
-      return possibleStructures[0].map(path => ({
-        path,
-        size: 0,
-      }));
-    } catch (error) {
-      console.error('[ModelDownloadService] Alternative method failed:', error);
-      throw new Error('Failed to access repository. Please check the repository URL and try again.');
     }
+    
+    throw new Error(`Could not find valid model structure for ${repoId}. Please verify the repository contains a CoreML model.`);
   }
 
   private async downloadHuggingFaceFile(
