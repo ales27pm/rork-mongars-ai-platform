@@ -148,11 +148,40 @@ actor DolphinCoreMLState {
 public class DolphinCoreMLModule: Module {
   private let log = Logger(subsystem: "app.27pm.mongars", category: "DolphinCoreML")
 
-  @available(iOS 18.0, *)
-  private var mlxEngine = MLXEngine()
+  private var mlxEngineStore: Any?
+  private var mlxEngineConfigStore: Any?
 
   @available(iOS 18.0, *)
-  private var mlxEngineConfig: MLXEngine.Configuration = .init()
+  private var mlxEngine: MLXEngine {
+    get {
+      if let engine = mlxEngineStore as? MLXEngine {
+        return engine
+      }
+
+      let engine = MLXEngine()
+      mlxEngineStore = engine
+      return engine
+    }
+    set {
+      mlxEngineStore = newValue
+    }
+  }
+
+  @available(iOS 18.0, *)
+  private var mlxEngineConfig: MLXEngine.Configuration {
+    get {
+      if let config = mlxEngineConfigStore as? MLXEngine.Configuration {
+        return config
+      }
+
+      let config = MLXEngine.Configuration()
+      mlxEngineConfigStore = config
+      return config
+    }
+    set {
+      mlxEngineConfigStore = newValue
+    }
+  }
 
   public func definition() -> ModuleDefinition {
     Name("DolphinCoreML")
