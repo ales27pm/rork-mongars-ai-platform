@@ -82,16 +82,22 @@ export class ModelDownloadService {
       const response = await fetch(apiUrl, {
         method: 'GET',
         headers,
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(30000),
       });
       
       if (!response.ok) {
-        console.log('[ModelDownloadService] API fetch failed, using fallback discovery');
+        console.log('[ModelDownloadService] API response:', response.status, response.statusText);
+        const text = await response.text();
+        console.log('[ModelDownloadService] Response body:', text.substring(0, 500));
         return this.fetchHuggingFaceRepoFilesAlternative(repoId);
       }
       
       const data = await response.json();
       console.log('[ModelDownloadService] Received file tree with', data.length, 'items');
+      
+      const allFiles = data.filter((item: any) => item.type === 'file');
+      console.log('[ModelDownloadService] Total files:', allFiles.length);
+      console.log('[ModelDownloadService] Sample files:', allFiles.slice(0, 5).map((f: any) => f.path));
       
       const mlpackageFiles = data
         .filter((item: any) => 
@@ -99,11 +105,13 @@ export class ModelDownloadService {
           (item.path.includes('.mlpackage') || 
            item.path.endsWith('.mlmodel') ||
            item.path.endsWith('.bin') ||
-           item.path.endsWith('Manifest.json'))
+           item.path.endsWith('Manifest.json') ||
+           item.path.endsWith('weights.bin') ||
+           item.path.includes('coreml'))
         )
         .map((item: any) => ({
           path: item.path,
-          size: item.size || 0,
+          size: item.lfs?.size || item.size || 0,
           lfs: item.lfs ? {
             oid: item.lfs.oid,
             size: item.lfs.size,
@@ -112,14 +120,18 @@ export class ModelDownloadService {
         }));
       
       if (mlpackageFiles.length > 0) {
-        console.log('[ModelDownloadService] Found', mlpackageFiles.length, 'mlpackage files');
+        console.log('[ModelDownloadService] Found', mlpackageFiles.length, 'CoreML files');
+        mlpackageFiles.forEach((f: HuggingFaceFile) => console.log(`  - ${f.path} (${this.formatBytes(f.size)})`));
         return mlpackageFiles;
       }
       
-      console.log('[ModelDownloadService] No mlpackage files found, using fallback');
+      console.log('[ModelDownloadService] No mlpackage files found in API response, using fallback');
       return this.fetchHuggingFaceRepoFilesAlternative(repoId);
     } catch (error) {
       console.error('[ModelDownloadService] API fetch error:', error);
+      if (error instanceof Error) {
+        console.error('[ModelDownloadService] Error details:', error.message);
+      }
       return this.fetchHuggingFaceRepoFilesAlternative(repoId);
     }
   }
@@ -129,19 +141,24 @@ export class ModelDownloadService {
     
     const possibleStructures = [
       [
+        'coreml/coreml-model.mlpackage/Manifest.json',
+        'coreml/coreml-model.mlpackage/Data/com.apple.CoreML/model.mlmodel',
+        'coreml/coreml-model.mlpackage/Data/com.apple.CoreML/weights/weight.bin',
+      ],
+      [
         'model.mlpackage/Manifest.json',
         'model.mlpackage/Data/com.apple.CoreML/model.mlmodel',
         'model.mlpackage/Data/com.apple.CoreML/weights/weight.bin',
       ],
       [
-        'coreml/model.mlpackage/Manifest.json',
-        'coreml/model.mlpackage/Data/com.apple.CoreML/model.mlmodel',
-        'coreml/model.mlpackage/Data/com.apple.CoreML/weights/weight.bin',
+        'Manifest.json',
+        'Data/com.apple.CoreML/model.mlmodel',
+        'Data/com.apple.CoreML/weights/weight.bin',
       ],
       [
-        'mlpackage/Manifest.json',
-        'mlpackage/Data/com.apple.CoreML/model.mlmodel',
-        'mlpackage/Data/com.apple.CoreML/weights/weight.bin',
+        'coreml/Manifest.json',
+        'coreml/Data/com.apple.CoreML/model.mlmodel',
+        'coreml/Data/com.apple.CoreML/weights/weight.bin',
       ],
     ];
     
@@ -152,11 +169,14 @@ export class ModelDownloadService {
       try {
         const testResponse = await fetch(testUrl, { 
           method: 'HEAD',
-          signal: AbortSignal.timeout(5000)
+          signal: AbortSignal.timeout(10000),
+          redirect: 'follow',
         });
         
+        console.log(`[ModelDownloadService] Test response: ${testResponse.status} ${testResponse.statusText}`);
+        
         if (testResponse.ok) {
-          console.log('[ModelDownloadService] Found valid structure, fetching sizes...');
+          console.log('[ModelDownloadService] ✓ Found valid structure!');
           
           const filesWithSizes = await Promise.all(
             structure.map(async (path) => {
@@ -164,29 +184,35 @@ export class ModelDownloadService {
                 const fileUrl = `https://huggingface.co/${repoId}/resolve/main/${path}`;
                 const headResponse = await fetch(fileUrl, { 
                   method: 'HEAD',
-                  signal: AbortSignal.timeout(5000)
+                  signal: AbortSignal.timeout(10000),
+                  redirect: 'follow',
                 });
                 
                 const size = headResponse.headers.get('content-length');
-                console.log(`[ModelDownloadService] ${path}: ${size || 'unknown'} bytes`);
+                const actualSize = size ? parseInt(size, 10) : 0;
+                console.log(`[ModelDownloadService]   ${path}: ${this.formatBytes(actualSize)}`);
                 
                 return {
                   path,
-                  size: size ? parseInt(size, 10) : 0,
+                  size: actualSize,
                 };
               } catch {
+                console.log(`[ModelDownloadService]   ${path}: Failed to fetch size`);
                 return {
                   path,
-                  size: 0,
+                  size: 1024 * 1024,
                 };
               }
             })
           );
           
+          const totalSize = filesWithSizes.reduce((sum, f) => sum + f.size, 0);
+          console.log(`[ModelDownloadService] Total download size: ${this.formatBytes(totalSize)}`);
+          
           return filesWithSizes;
         }
-      } catch {
-        console.log('[ModelDownloadService] Structure not found, trying next...');
+      } catch (error) {
+        console.log('[ModelDownloadService] Structure test failed:', error instanceof Error ? error.message : 'Unknown error');
         continue;
       }
     }
@@ -202,8 +228,9 @@ export class ModelDownloadService {
   ): Promise<boolean> {
     try {
       const url = `https://huggingface.co/${repoId}/resolve/main/${filePath}`;
-      console.log('[ModelDownloadService] Downloading:', url);
-      console.log('[ModelDownloadService] To:', localPath);
+      console.log('[ModelDownloadService] Downloading file:');
+      console.log(`  URL: ${url}`);
+      console.log(`  Destination: ${localPath}`);
       
       const callback = (downloadProgress: FileSystem.DownloadProgressData) => {
         if (onProgress) {
@@ -217,6 +244,7 @@ export class ModelDownloadService {
         {
           headers: {
             'Accept': '*/*',
+            'User-Agent': 'Mozilla/5.0',
           },
         },
         callback
@@ -224,17 +252,24 @@ export class ModelDownloadService {
       
       const result = await downloadResumable.downloadAsync();
       
-      if (result) {
-        console.log('[ModelDownloadService] Successfully downloaded:', filePath);
-        return true;
+      if (result && result.status === 200) {
+        const fileInfo = await FileSystem.getInfoAsync(localPath);
+        if (fileInfo.exists && 'size' in fileInfo) {
+          console.log(`[ModelDownloadService] ✓ Downloaded ${filePath} (${this.formatBytes(fileInfo.size || 0)})`);
+          return true;
+        } else {
+          console.error('[ModelDownloadService] Downloaded file not found:', filePath);
+          return false;
+        }
       } else {
-        console.error('[ModelDownloadService] Download returned null for:', filePath);
+        console.error('[ModelDownloadService] Download failed with status:', result?.status);
         return false;
       }
     } catch (error) {
-      console.error('[ModelDownloadService] Failed to download file:', filePath);
+      console.error('[ModelDownloadService] Download error for file:', filePath);
       if (error instanceof Error) {
-        console.error('[ModelDownloadService] Error message:', error.message);
+        console.error('[ModelDownloadService] Error:', error.message);
+        console.error('[ModelDownloadService] Stack:', error.stack);
       }
       return false;
     }
@@ -297,7 +332,11 @@ export class ModelDownloadService {
       await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
       
       const startTime = Date.now();
+      const totalSize = files.reduce((sum, f) => sum + f.size, 0);
       let totalBytesDownloaded = 0;
+      const fileBytesStart = new Map<string, number>();
+      
+      console.log(`[ModelDownloadService] Downloading ${files.length} files, total: ${this.formatBytes(totalSize)}`);
       
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -306,18 +345,22 @@ export class ModelDownloadService {
         
         await FileSystem.makeDirectoryAsync(localFileDir, { intermediates: true });
         
+        fileBytesStart.set(file.path, totalBytesDownloaded);
+        
         const success = await this.downloadHuggingFaceFile(
           model.huggingFaceRepo!,
           file.path,
           localFilePath,
-          (bytes) => {
-            totalBytesDownloaded += bytes;
+          (currentFileBytes) => {
+            const fileStartBytes = fileBytesStart.get(file.path) || 0;
+            totalBytesDownloaded = fileStartBytes + currentFileBytes;
+            
             if (onProgress) {
               onProgress(
                 this.calculateProgress(
                   {
                     totalBytesWritten: totalBytesDownloaded,
-                    totalBytesExpectedToWrite: model.size,
+                    totalBytesExpectedToWrite: totalSize,
                   },
                   model.id,
                   startTime
@@ -333,7 +376,8 @@ export class ModelDownloadService {
           return false;
         }
         
-        console.log(`[ModelDownloadService] Progress: ${i + 1}/${files.length} files`);
+        totalBytesDownloaded = fileBytesStart.get(file.path)! + file.size;
+        console.log(`[ModelDownloadService] ✓ Downloaded ${i + 1}/${files.length}: ${file.path}`);
       }
       
       const mlpackagePath = `${tempDir}model.mlpackage`;
