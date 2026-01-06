@@ -134,7 +134,7 @@ jobs:
       - name: "🗂️ Prepare artifacts"
         run: |
           mkdir -p artifacts/ios
-          eas build:download --platform ios --latest --output artifacts/ios
+          eas build:download --platform ios --profile production --latest --path artifacts/ios
 
       - name: "📤 Upload iOS build artifacts"
         uses: actions/upload-artifact@v4
