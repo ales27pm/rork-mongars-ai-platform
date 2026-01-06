@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "usesAppleSignin": true,
-      "bundleIdentifier": "app.27pm.mongars",
+      "bundleIdentifier": "app.27pm.monGARS",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio",
