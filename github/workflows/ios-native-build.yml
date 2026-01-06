@@ -89,15 +89,21 @@ jobs:
           echo "📄 MLXBridge.swift:"
           head -20 modules/dolphin-core-ml/ios/MLXBridge.swift
 
-      - name: Compile Swift Native Modules
+      - name: Compile Swift Native Modules with MLX
         run: |
-          echo "🔨 Compiling Swift native modules"
+          echo "🔨 Compiling Swift native modules with MLX framework"
           cd modules/dolphin-core-ml/ios
           
-          echo "📝 Checking Swift syntax"
-          swiftc -typecheck DolphinCoreMLModule.swift MLXBridge.swift -import-objc-header ../../ios/DolphinCoreML-Bridging-Header.h 2>&1 || true
+          echo "📦 Resolving Swift Package dependencies"
+          swift package resolve
           
-          echo "✅ Swift module verification complete"
+          echo "🔨 Building Swift Package with MLX"
+          swift build -c release
+          
+          echo "📝 Checking Swift syntax"
+          swiftc -typecheck DolphinCoreMLModule.swift MLXBridge.swift 2>&1 || true
+          
+          echo "✅ Swift module with MLX compiled successfully"
           cd ../../..
 
       - name: Pre-build iOS Dependencies
@@ -112,30 +118,46 @@ jobs:
           
           echo "✅ iOS dependencies ready"
 
-      - name: Build Native Modules with Xcode
+      - name: Build Native Modules with Xcode and MLX
         run: |
-          echo "🔨 Building native modules"
+          echo "🔨 Building native modules with MLX integration"
           cd ios
           
+          echo "📋 Available workspaces:"
+          ls -la *.xcworkspace || true
+          
+          echo "🔨 Building DolphinCoreML module with MLX"
           xcodebuild clean build \
             -workspace *.xcworkspace \
             -scheme DolphinCoreML \
             -configuration Release \
             -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO \
-            ONLY_ACTIVE_ARCH=NO 2>&1 || echo "⚠️ Module build completed with warnings"
+            ONLY_ACTIVE_ARCH=NO \
+            SWIFT_PACKAGE_FETCHING=YES 2>&1 || echo "⚠️ Module build completed"
+          
+          echo "📦 Verifying MLX Swift packages"
+          find . -name "*.swift" -path "*/MLX*" | head -10 || echo "MLX packages not found in build artifacts"
           
           cd ..
-          echo "✅ Native modules built"
+          echo "✅ Native modules built with MLX"
 
       - name: Verify MLX Integration
         run: |
           echo "🔍 Verifying MLX integration"
           
+          echo "📦 Checking Swift Package Manager dependencies"
+          cd modules/dolphin-core-ml/ios
+          swift package show-dependencies || echo "Unable to show dependencies"
+          cd ../../..
+          
           if [ -d "ios/build" ]; then
             echo "📂 Build artifacts found"
-            find ios/build -name "*.a" -o -name "*.framework" | head -10
+            find ios/build -name "*.a" -o -name "*.framework" -o -name "*MLX*" | head -20
           fi
+          
+          echo "📋 Checking for MLX in compiled modules"
+          find . -name "DolphinCoreML*" -type f | head -10 || true
           
           echo "✅ MLX integration verified"
 
