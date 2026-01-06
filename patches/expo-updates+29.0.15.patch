@@ -1,13 +1,13 @@
 diff --git a/node_modules/expo-updates/ios/EXUpdates/AppController.swift b/node_modules/expo-updates/ios/EXUpdates/AppController.swift
-index 0000000..1111111 100644
+index ba63b60..b4ef194 100644
 --- a/node_modules/expo-updates/ios/EXUpdates/AppController.swift
 +++ b/node_modules/expo-updates/ios/EXUpdates/AppController.swift
-@@
--  public static var sharedInstance: InternalAppControllerInterface {
+@@ -203,8 +203,29 @@ public class AppController: NSObject {
+   }
+   private static var _sharedInstance: InternalAppControllerInterface?
+   public static var sharedInstance: InternalAppControllerInterface {
 -    assert(_sharedInstance != nil, "AppController.sharedInstace was called before the module was initialized")
 -    return _sharedInstance!
--  }
-+  public static var sharedInstance: InternalAppControllerInterface {
 +    if let existingInstance = _sharedInstance {
 +      return existingInstance
 +    }
@@ -31,4 +31,6 @@ index 0000000..1111111 100644
 +    let disabledController = DisabledAppController(error: fallbackError)
 +    _sharedInstance = disabledController
 +    return disabledController
-+  }
+   }
+   private static var _overrideConfig: UpdatesConfig?
+ 
