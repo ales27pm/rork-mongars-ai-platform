@@ -332,6 +332,7 @@ public class DolphinCoreMLModule: Module {
     let heads = payload["heads"] as? Int ?? mlxEngineConfig.heads
     let layers = payload["layers"] as? Int ?? mlxEngineConfig.layers
     let seed = payload["seed"] as? UInt64 ?? mlxEngineConfig.seed
+    let maxCache = payload["maxCacheEntries"] as? Int ?? mlxEngineConfig.maxCacheEntries
 
     return MLXEngine.Configuration(
       vocabSize: vocab,
@@ -339,7 +340,8 @@ public class DolphinCoreMLModule: Module {
       hiddenSize: hidden,
       heads: heads,
       layers: layers,
-      seed: seed
+      seed: seed,
+      maxCacheEntries: maxCache
     )
   }
 
