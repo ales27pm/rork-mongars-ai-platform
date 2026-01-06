@@ -56,12 +56,24 @@ export const [EvolutionProvider, useEvolution] = createContextHook(() => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored) {
-        setCycles(JSON.parse(stored));
+        try {
+          setCycles(JSON.parse(stored));
+        } catch (parseError) {
+          console.error('[Evolution] Cycles parse error:', parseError);
+          console.error('[Evolution] Corrupted data, clearing...');
+          await AsyncStorage.removeItem(STORAGE_KEY);
+        }
       }
       
       const datasetStored = await AsyncStorage.getItem(DATASET_KEY);
       if (datasetStored) {
-        setTrainingDataset(JSON.parse(datasetStored));
+        try {
+          setTrainingDataset(JSON.parse(datasetStored));
+        } catch (parseError) {
+          console.error('[Evolution] Dataset parse error:', parseError);
+          console.error('[Evolution] Corrupted dataset, clearing...');
+          await AsyncStorage.removeItem(DATASET_KEY);
+        }
       }
     } catch (error) {
       console.error('[Evolution] Load error:', error);

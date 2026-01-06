@@ -82,11 +82,26 @@ export class ModelDownloadService {
       const response = await fetch(apiUrl, { headers });
       
       if (!response.ok) {
-        console.warn('[ModelDownloadService] API request failed, using alternative method');
+        console.warn('[ModelDownloadService] API request failed:', response.status, response.statusText);
         return this.fetchHuggingFaceRepoFilesAlternative(repoId);
       }
       
-      const files = await response.json();
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.warn('[ModelDownloadService] Non-JSON response, using alternative method');
+        return this.fetchHuggingFaceRepoFilesAlternative(repoId);
+      }
+      
+      const responseText = await response.text();
+      let files;
+      
+      try {
+        files = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('[ModelDownloadService] JSON parse error:', parseError);
+        console.error('[ModelDownloadService] Response preview:', responseText.substring(0, 200));
+        return this.fetchHuggingFaceRepoFilesAlternative(repoId);
+      }
       
       if (!Array.isArray(files)) {
         console.warn('[ModelDownloadService] Unexpected API response, using alternative');

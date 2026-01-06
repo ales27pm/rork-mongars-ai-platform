@@ -177,10 +177,18 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
       const stored = await AsyncStorage.getItem(CACHE_STORAGE_KEY);
       if (!stored) return;
 
-      const parsed = JSON.parse(stored) as {
-        generation?: ModelCacheEntry[];
-        embedding?: ModelCacheEntry[];
-      };
+      let parsed;
+      try {
+        parsed = JSON.parse(stored) as {
+          generation?: ModelCacheEntry[];
+          embedding?: ModelCacheEntry[];
+        };
+      } catch (parseError) {
+        console.error('[UnifiedLLM] Cache parse error:', parseError);
+        console.error('[UnifiedLLM] Corrupted cache data, clearing...');
+        await AsyncStorage.removeItem(CACHE_STORAGE_KEY);
+        return;
+      }
       const now = Date.now();
       const hydrate = (entries?: ModelCacheEntry[]) => {
         if (!Array.isArray(entries)) return [] as ModelCacheEntry[];
@@ -221,6 +229,10 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
           console.error(
             "[UnifiedLLM] JSON parse error, clearing corrupted data:",
             parseError,
+          );
+          console.error(
+            "[UnifiedLLM] Corrupted data preview:",
+            stored.substring(0, 100)
           );
           await AsyncStorage.removeItem(STORAGE_KEY);
         }

@@ -261,11 +261,29 @@ export default function ChatScreen() {
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[STT] Transcription failed:', response.status, errorText.substring(0, 200));
         throw new Error(`Transcription failed: ${response.statusText}`);
       }
 
-      const transcription: { text: string; language: string } =
-        await response.json();
+      const contentType = response.headers.get('content-type');
+      const responseText = await response.text();
+      
+      let transcription: { text: string; language: string };
+      
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          transcription = JSON.parse(responseText);
+        } catch (parseError) {
+          console.error('[STT] JSON parse error:', parseError);
+          console.error('[STT] Response preview:', responseText.substring(0, 200));
+          throw new Error('Invalid response format from transcription service');
+        }
+      } else {
+        console.error('[STT] Non-JSON response:', responseText.substring(0, 200));
+        throw new Error('Transcription service returned non-JSON response');
+      }
+      
       console.log("[STT] Transcription result:", transcription);
 
       if (transcription.text) {
