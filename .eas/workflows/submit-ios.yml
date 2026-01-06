@@ -12,6 +12,8 @@ jobs:
   submit_ios:
     name: Submit to TestFlight
     needs: [build_ios]
-    type: testflight
+    type: submit
     params:
-      build_id: ${{ needs.build_ios.outputs.build_id }}
+      platform: ios
+      profile: production
+      buildId: ${{ needs.build_ios.outputs.buildId }}
