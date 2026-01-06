@@ -1,12 +1,20 @@
 import Foundation
+import Hub
 import MLX
+import MLXLLM
+import MLXLMCommon
 import MLXNN
 import MLXRandom
+import Tokenizers
 import os
 
 @available(iOS 18.0, *)
 public actor MLXEngine {
   public struct Configuration: Equatable {
+    public let modelId: String
+    public let revision: String
+    public let tokenizerId: String?
+    public let localModelPath: String?
     public let vocabSize: Int
     public let contextLength: Int
     public let hiddenSize: Int
@@ -22,8 +30,16 @@ public actor MLXEngine {
       heads: Int = 6,
       layers: Int = 4,
       seed: UInt64 = 42,
-      maxCacheEntries: Int = 128
+      maxCacheEntries: Int = 128,
+      modelId: String = "mlx-community/lille-130m",
+      revision: String = "main",
+      tokenizerId: String? = nil,
+      localModelPath: String? = nil
     ) {
+      self.modelId = modelId
+      self.revision = revision
+      self.tokenizerId = tokenizerId
+      self.localModelPath = localModelPath
       self.vocabSize = vocabSize
       self.contextLength = contextLength
       self.hiddenSize = hiddenSize
@@ -41,7 +57,11 @@ public actor MLXEngine {
         "heads": heads,
         "layers": layers,
         "seed": seed,
-        "maxCacheEntries": maxCacheEntries
+        "maxCacheEntries": maxCacheEntries,
+        "modelId": modelId,
+        "revision": revision,
+        "tokenizerId": tokenizerId as Any,
+        "localModelPath": localModelPath as Any
       ]
     }
   }
@@ -50,10 +70,9 @@ public actor MLXEngine {
 
   private var configuration = Configuration()
   private var isReady = false
-  private var tokenEmbedding: Embedding?
-  private var positionEmbedding: Embedding?
-  private var transformerBlocks: [MLXTransformerBlock] = []
-  private var lmHead: Linear?
+  private var modelContext: ModelContext?
+  private var tokenizer: Tokenizer?
+  private var generationCache: [KVCache] = []
   private var tokenCache: [String: [Int]] = [:]
   private var tokenCacheOrder: [String] = []
 
@@ -63,23 +82,36 @@ public actor MLXEngine {
     try validate(config: config)
     configuration = config
     MLXRandom.seed(config.seed)
-
-    tokenEmbedding = Embedding(embeddingCount: config.vocabSize, dimensions: config.hiddenSize)
-    positionEmbedding = Embedding(embeddingCount: config.contextLength, dimensions: config.hiddenSize)
-    transformerBlocks = (0..<config.layers).map { _ in
-      let block = MLXTransformerBlock(dimensions: config.hiddenSize, heads: config.heads)
-      block.training = false
-      return block
+    let hub = HubApi()
+    let identifier: ModelConfiguration.Identifier
+    if let localPath = config.localModelPath, !localPath.isEmpty {
+      identifier = .directory(URL(fileURLWithPath: localPath, isDirectory: true))
+    } else {
+      identifier = .id(config.modelId, revision: config.revision)
     }
 
-    let head = Linear(config.hiddenSize, config.vocabSize, bias: false)
-    head.training = false
-    lmHead = head
+    let modelConfiguration = ModelConfiguration(
+      id: identifier,
+      tokenizerId: config.tokenizerId,
+      overrideTokenizer: nil,
+      defaultPrompt: "",
+      extraEOSTokens: []
+    )
 
+    let factory = ModelFactory(registry: LLMRegistry.shared)
+    let loadedContext = try await factory.load(
+      hub: hub,
+      configuration: modelConfiguration
+    )
+
+    modelContext = loadedContext
+    tokenizer = loadedContext.tokenizer
+    generationCache = []
     isReady = true
     resetCache()
 
-    log.info("[MLXEngine] Initialized with vocabSize=\(config.vocabSize) hidden=\(config.hiddenSize) layers=\(config.layers) heads=\(config.heads)")
+    log.info(
+      "[MLXEngine] Initialized with model=\(config.modelId) revision=\(config.revision) tokenizer=\(config.tokenizerId ?? config.modelId)")
 
     return [
       "engine": "mlx",
@@ -94,7 +126,7 @@ public actor MLXEngine {
   }
 
   public func encodeBatch(_ texts: [String], options: [String: Any] = [:]) async throws -> [[Double]] {
-    guard isReady, let tokenEmbedding, let positionEmbedding, let lmHead else {
+    guard isReady, let context = modelContext else {
       throw NSError(domain: "MLXEngine", code: -1, userInfo: [NSLocalizedDescriptionKey: "MLX engine not initialized"])
     }
 
@@ -104,21 +136,24 @@ public actor MLXEngine {
     results.reserveCapacity(texts.count)
 
     for text in texts {
-      let tokenIds = sanitize(tokens: tokenize(text))
-      let positions = Array(0..<tokenIds.count)
+      let userInput = UserInput(prompt: text)
+      let lmInput = try await context.processor.prepare(input: userInput)
+      var cache = context.model.newCache(parameters: nil)
+      let prepared = try context.model.prepare(
+        lmInput,
+        cache: cache,
+        windowSize: configuration.contextLength
+      )
 
-      var hidden = tokenEmbedding(MLXArray(tokenIds)) + positionEmbedding(MLXArray(positions))
-      hidden = expandedDimensions(hidden, axis: 0)
-
-      let causalMask = MultiHeadAttention.createAdditiveCausalMask(tokenIds.count, dtype: hidden.dtype)
-
-      for block in transformerBlocks {
-        hidden = block(hidden, mask: causalMask)
+      let output: LMOutput
+      switch prepared {
+      case .logits(let logits):
+        output = logits
+      case .tokens(let tokens):
+        output = context.model(tokens, cache: cache)
       }
 
-      // Project to logits and pool hidden states to obtain an embedding
-      let decoderHidden = lmHead(hidden)
-      let pooled = decoderHidden.mean(axis: 1, keepDims: false)
+      let pooled = output.logits.mean(axis: 0, keepDims: false)
       let floatValues = pooled.asArray(Float.self)
 
       var doubleValues = floatValues.prefix(targetDim).map { Double($0) }
@@ -142,39 +177,33 @@ public actor MLXEngine {
     temperature: Float = 0.7,
     topK: Int = 40
   ) async throws -> String {
-    guard isReady, let tokenEmbedding, let positionEmbedding, let lmHead else {
+    guard isReady, let context = modelContext else {
       throw NSError(domain: "MLXEngine", code: -1, userInfo: [NSLocalizedDescriptionKey: "MLX engine not initialized"])
     }
 
-    var tokenIds = Array(sanitize(tokens: tokenize(prompt)).suffix(configuration.contextLength))
-    var output = ""
+    let parameters = GenerateParameters(
+      maxTokens: maxTokens,
+      temperature: temperature,
+      topP: 1.0,
+      repetitionPenalty: nil,
+      repetitionContextSize: 128
+    )
 
-    for iteration in 0..<maxTokens {
-      let positions = Array(0..<tokenIds.count)
-      var hidden = tokenEmbedding(MLXArray(Array(tokenIds))) + positionEmbedding(MLXArray(positions))
-      hidden = expandedDimensions(hidden, axis: 0)
-      let causalMask = MultiHeadAttention.createAdditiveCausalMask(tokenIds.count, dtype: hidden.dtype)
+    let userInput = UserInput(prompt: prompt)
+    let lmInput = try await context.processor.prepare(input: userInput)
 
-      for block in transformerBlocks {
-        hidden = block(hidden, mask: causalMask)
-      }
-
-      let logits = lmHead(hidden)
-      let lastLogits = logits[MLXArray([-1])]
-      let nextToken = sampleToken(from: lastLogits, temperature: temperature, topK: topK)
-
-      tokenIds.append(nextToken)
-      let decoded = decode(tokenId: nextToken)
-      output.append(decoded)
-
-      log.debug("[MLXEngine] Generated token #\(iteration): \(decoded)")
-
-      if tokenIds.count > configuration.contextLength {
-        tokenIds = tokenIds.suffix(configuration.contextLength)
-      }
+    if generationCache.isEmpty {
+      generationCache = context.model.newCache(parameters: parameters)
     }
 
-    return output
+    let result = try MLXLMCommon.generate(
+      input: lmInput,
+      cache: generationCache,
+      parameters: parameters,
+      context: context
+    ) { _ in .more }
+
+    return result.output
   }
 
   private func tokenize(_ text: String) -> [Int] {
@@ -183,57 +212,17 @@ public actor MLXEngine {
       return cached
     }
 
-    guard !sanitized.isEmpty else { return [0] }
+    guard !sanitized.isEmpty, let tokenizer else { return [0] }
 
-    var tokens: [Int] = []
-    let scalars = sanitized.unicodeScalars
-    tokens.reserveCapacity(scalars.count + 1)
-    tokens.append(1) // BOS token
-
-    for scalar in scalars {
-      let value = Int(scalar.value % UInt32(configuration.vocabSize))
-      tokens.append(max(2, value))
+    do {
+      let encoding = try tokenizer.encode(sanitized)
+      let ids = encoding.ids.map { Int($0) }
+      cache(tokens: ids, for: sanitized)
+      return ids
+    } catch {
+      log.error("[MLXEngine] Failed to tokenize input: \(error.localizedDescription)")
+      return [0]
     }
-
-    tokens.append(2) // EOS token marker
-    cache(tokens: tokens, for: sanitized)
-    return tokens
-  }
-
-  private func sanitize(tokens: [Int]) -> [Int] {
-    let limited = tokens.prefix(configuration.contextLength)
-    return limited.map { max(0, min(configuration.vocabSize - 1, $0)) }
-  }
-
-  private func decode(tokenId: Int) -> String {
-    if tokenId < 32 || tokenId > 126 {
-      return ""
-    }
-    guard let scalar = UnicodeScalar(tokenId) else { return "" }
-    return String(Character(scalar))
-  }
-
-  private func sampleToken(from logits: MLXArray, temperature: Float, topK: Int) -> Int {
-    let scaled = logits / temperature
-    let probabilities = softmax(scaled, axis: -1)
-    let values = probabilities.asArray(Float.self)
-    guard !values.isEmpty else { return 0 }
-
-    let indexed = values.enumerated().sorted { $0.element > $1.element }
-    let candidates = indexed.prefix(max(1, min(topK, indexed.count)))
-    let sumTop = candidates.reduce(Float(0)) { $0 + $1.element }
-    let normalized = candidates.map { ($0.offset, $0.element / max(sumTop, 1e-8)) }
-
-    let threshold = Float.random(in: 0..<1)
-    var cumulative: Float = 0
-    for (index, prob) in normalized {
-      cumulative += prob
-      if threshold <= cumulative {
-        return index
-      }
-    }
-
-    return normalized.last?.0 ?? 0
   }
 
   private func validate(config: Configuration) throws {
@@ -246,6 +235,14 @@ public actor MLXEngine {
     if config.maxCacheEntries <= 0 {
       throw NSError(domain: "MLXEngine", code: -101, userInfo: [
         NSLocalizedDescriptionKey: "maxCacheEntries must be greater than zero"
+      ])
+    }
+
+    if config.modelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && (config.localModelPath ?? "").isEmpty
+    {
+      throw NSError(domain: "MLXEngine", code: -102, userInfo: [
+        NSLocalizedDescriptionKey: "A modelId or localModelPath is required for MLX engine"
       ])
     }
   }
@@ -270,46 +267,5 @@ public actor MLXEngine {
 
   public func isReady(for config: Configuration) -> Bool {
     isReady && config == configuration
-  }
-}
-
-@available(iOS 18.0, *)
-final class MLXTransformerBlock: Module {
-  @ModuleInfo(key: "attention") private var attention: MultiHeadAttention
-  private let ln1: LayerNorm
-  private let ln2: LayerNorm
-  @ModuleInfo(key: "ffn1") private var ffn1: Linear
-  @ModuleInfo(key: "ffn2") private var ffn2: Linear
-  private let dropout: Dropout
-  private let activation = GELU()
-
-  init(dimensions: Int, heads: Int) {
-    self._attention.wrappedValue = MultiHeadAttention(dimensions: dimensions, numHeads: heads)
-    self.ln1 = LayerNorm(dimensions: dimensions)
-    self.ln2 = LayerNorm(dimensions: dimensions)
-    self.ffn1 = Linear(dimensions, dimensions * 4)
-    self.ffn2 = Linear(dimensions * 4, dimensions)
-    self.dropout = Dropout(p: 0.05)
-    super.init()
-    training = false
-  }
-
-  func callAsFunction(_ x: MLXArray, mask: MLXArray?) -> MLXArray {
-    var hidden = ln1(x)
-    if let mask {
-      hidden = attention(hidden, keys: hidden, values: hidden, mask: mask)
-    } else {
-      hidden = attention(hidden, keys: hidden, values: hidden)
-    }
-    hidden = dropout(hidden)
-    var residual = x + hidden
-
-    var feedForward = ln2(residual)
-    feedForward = activation(ffn1(feedForward))
-    feedForward = dropout(feedForward)
-    feedForward = ffn2(feedForward)
-
-    residual = residual + feedForward
-    return residual
   }
 }

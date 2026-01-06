@@ -20,6 +20,10 @@ let package = Package(
         .package(
             url: "https://github.com/ml-explore/mlx-swift-examples",
             revision: "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631"
+        ),
+        .package(
+            url: "https://github.com/huggingface/swift-transformers",
+            from: "1.0.0"
         )
     ],
     targets: [
@@ -32,7 +36,10 @@ let package = Package(
                 .product(name: "MLXRandom", package: "mlx-swift"),
                 .product(name: "MLXLinalg", package: "mlx-swift"),
                 .product(name: "MLXFFT", package: "mlx-swift"),
-                .product(name: "MLXLLM", package: "mlx-swift-examples")
+                .product(name: "MLXLLM", package: "mlx-swift-examples"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-examples"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers")
             ],
             path: ".",
             sources: [
