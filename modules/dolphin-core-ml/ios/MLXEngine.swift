@@ -177,8 +177,7 @@ public actor MLXEngine {
   public func generate(
     prompt: String,
     maxTokens: Int = 64,
-    temperature: Float = 0.7,
-    topK: Int = 40
+    temperature: Float = 0.7
   ) async throws -> String {
     guard isReady, let context = modelContext else {
       throw NSError(domain: "MLXEngine", code: -1, userInfo: [NSLocalizedDescriptionKey: "MLX engine not initialized"])
