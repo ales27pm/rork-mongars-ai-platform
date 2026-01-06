@@ -34,25 +34,39 @@ actor DolphinCoreMLState {
     }
 
     let fileManager = FileManager.default
-    let compiledExtension = "mlmodelc"
-
     var candidateURLs: [URL] = []
 
-    if let bundleURL = Bundle.main.url(forResource: modelName, withExtension: compiledExtension) {
-      candidateURLs.append(bundleURL)
-    }
-
     if let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first {
-      let docURL = documentsURL.appendingPathComponent("\(modelName).\(compiledExtension)")
-      if fileManager.fileExists(atPath: docURL.path) {
-        candidateURLs.append(docURL)
+      let mlpackagePath = documentsURL.appendingPathComponent("models").appendingPathComponent("\(modelName).mlpackage")
+      if fileManager.fileExists(atPath: mlpackagePath.path) {
+        os_log("[DolphinCoreML] Found model at: %@", mlpackagePath.path)
+        candidateURLs.append(mlpackagePath)
+      }
+      
+      let docPath = documentsURL.appendingPathComponent("\(modelName).mlpackage")
+      if fileManager.fileExists(atPath: docPath.path) {
+        os_log("[DolphinCoreML] Found model at: %@", docPath.path)
+        candidateURLs.append(docPath)
       }
     }
 
-    guard let selectedURL = candidateURLs.first else {
-      throw NSError(domain: "DolphinCoreML", code: -1, userInfo: [NSLocalizedDescriptionKey: "MODEL_NOT_FOUND"])
+    if let bundleURL = Bundle.main.url(forResource: modelName, withExtension: "mlmodelc") {
+      os_log("[DolphinCoreML] Found compiled model in bundle: %@", bundleURL.path)
+      candidateURLs.append(bundleURL)
+    }
+    
+    if let bundlePackage = Bundle.main.url(forResource: modelName, withExtension: "mlpackage") {
+      os_log("[DolphinCoreML] Found mlpackage in bundle: %@", bundlePackage.path)
+      candidateURLs.append(bundlePackage)
     }
 
+    guard let selectedURL = candidateURLs.first else {
+      os_log("[DolphinCoreML] MODEL_NOT_FOUND: %@", modelName)
+      throw NSError(domain: "DolphinCoreML", code: -1, userInfo: [NSLocalizedDescriptionKey: "MODEL_NOT_FOUND: \(modelName)"])
+    }
+
+    os_log("[DolphinCoreML] Loading model from: %@", selectedURL.path)
+    
     let configuration = MLModelConfiguration()
     configuration.computeUnits = computeUnits
 
@@ -66,6 +80,7 @@ actor DolphinCoreMLState {
       "computeUnits": computeUnits.rawValue
     ]
 
+    os_log("[DolphinCoreML] Model loaded successfully from: %@", selectedURL.path)
     return loadedModel
   }
 

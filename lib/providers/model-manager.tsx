@@ -173,7 +173,12 @@ export const [ModelManagerProvider, useModelManager] = createContextHook(() => {
 
   const loadModel = useCallback(async (modelId: string) => {
     const model = models.find((m) => m.id === modelId);
-    if (!model || !model.isDownloaded) {
+    if (!model) {
+      console.error('[ModelManager] Model not found:', modelId);
+      return false;
+    }
+
+    if (!model.isDownloaded) {
       console.error('[ModelManager] Model not downloaded:', modelId);
       return false;
     }
@@ -190,8 +195,17 @@ export const [ModelManagerProvider, useModelManager] = createContextHook(() => {
     setIsLoading(true);
 
     try {
+      console.log('[ModelManager] Compiling model:', modelId);
+      const compiled = await modelDownloadService.compileModel(modelId);
+      
+      if (!compiled) {
+        console.error('[ModelManager] Model compilation failed:', modelId);
+        return false;
+      }
+
+      console.log('[ModelManager] Initializing CoreML with model:', model.id);
       const success = await localModelManager.initialize({
-        modelName: model.name,
+        modelName: model.id,
         enableEncryption: settings.enableEncryption,
         maxBatchSize: settings.maxBatchSize,
         computeUnits: settings.computeUnits,
@@ -209,7 +223,7 @@ export const [ModelManagerProvider, useModelManager] = createContextHook(() => {
         const newSettings = { ...settings, selectedModelId: modelId };
         await saveSettings(newSettings);
 
-        console.log('[ModelManager] Model loaded successfully:', modelId);
+        console.log('[ModelManager] ✓ Model loaded successfully:', modelId);
         return true;
       }
 

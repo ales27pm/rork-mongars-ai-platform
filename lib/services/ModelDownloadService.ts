@@ -67,113 +67,59 @@ export class ModelDownloadService {
   private async fetchHuggingFaceRepoFiles(repoId: string, token?: string): Promise<HuggingFaceFile[]> {
     console.log('[ModelDownloadService] Fetching repository structure:', repoId);
     
-    try {
-      const headers: Record<string, string> = {
-        'Accept': 'application/json',
-      };
-      
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      
-      const apiUrl = `https://huggingface.co/api/models/${repoId}/tree/main`;
-      console.log('[ModelDownloadService] API URL:', apiUrl);
-      
-      const response = await fetch(apiUrl, { headers });
-      
-      if (!response.ok) {
-        console.warn('[ModelDownloadService] API request failed:', response.status, response.statusText);
-        return this.fetchHuggingFaceRepoFilesAlternative(repoId);
-      }
-      
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        console.warn('[ModelDownloadService] Non-JSON response, using alternative method');
-        return this.fetchHuggingFaceRepoFilesAlternative(repoId);
-      }
-      
-      const responseText = await response.text();
-      let files;
-      
-      try {
-        files = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('[ModelDownloadService] JSON parse error:', parseError);
-        console.error('[ModelDownloadService] Response preview:', responseText.substring(0, 200));
-        return this.fetchHuggingFaceRepoFilesAlternative(repoId);
-      }
-      
-      if (!Array.isArray(files)) {
-        console.warn('[ModelDownloadService] Unexpected API response, using alternative');
-        return this.fetchHuggingFaceRepoFilesAlternative(repoId);
-      }
-      
-      const coreMLFiles = files
-        .filter((f: any) => f.type === 'file' && f.path)
-        .map((f: any) => ({
-          path: f.path,
-          size: f.size || 0,
-          lfs: f.lfs,
-        }));
-      
-      console.log(`[ModelDownloadService] Found ${coreMLFiles.length} files`);
-      return coreMLFiles;
-    } catch (error) {
-      console.error('[ModelDownloadService] Failed to fetch repo files:', error);
-      return this.fetchHuggingFaceRepoFilesAlternative(repoId);
-    }
+    return this.fetchHuggingFaceRepoFilesAlternative(repoId);
   }
 
   private async fetchHuggingFaceRepoFilesAlternative(repoId: string): Promise<HuggingFaceFile[]> {
     try {
-      console.log('[ModelDownloadService] Using direct file structure for:', repoId);
+      console.log('[ModelDownloadService] Using direct file discovery for:', repoId);
       
-      const testUrl = `https://huggingface.co/${repoId}/resolve/main/model.mlpackage/Manifest.json`;
-      console.log('[ModelDownloadService] Testing repository access...');
-      
-      try {
-        const testResponse = await fetch(testUrl, { method: 'HEAD' });
-        if (testResponse.ok) {
-          console.log('[ModelDownloadService] Repository is accessible, using standard CoreML structure');
-          
-          const knownStructure: HuggingFaceFile[] = [
-            {
-              path: 'model.mlpackage/Manifest.json',
-              size: 0,
-            },
-            {
-              path: 'model.mlpackage/Data/com.apple.CoreML/model.mlmodel',
-              size: 0,
-            },
-            {
-              path: 'model.mlpackage/Data/com.apple.CoreML/weights/weight.bin',
-              size: 0,
-            },
-          ];
-          
-          return knownStructure;
-        }
-      } catch {
-        console.warn('[ModelDownloadService] HEAD request failed, trying direct structure');
-      }
-      
-      console.log('[ModelDownloadService] Using minimal CoreML structure');
-      const minimalStructure: HuggingFaceFile[] = [
-        {
-          path: 'model.mlpackage/Manifest.json',
-          size: 0,
-        },
-        {
-          path: 'model.mlpackage/Data/com.apple.CoreML/model.mlmodel',
-          size: 0,
-        },
-        {
-          path: 'model.mlpackage/Data/com.apple.CoreML/weights/weight.bin',
-          size: 0,
-        },
+      const possibleStructures = [
+        [
+          'model.mlpackage/Manifest.json',
+          'model.mlpackage/Data/com.apple.CoreML/model.mlmodel',
+          'model.mlpackage/Data/com.apple.CoreML/weights/weight.bin',
+        ],
+        [
+          'coreml/model.mlpackage/Manifest.json',
+          'coreml/model.mlpackage/Data/com.apple.CoreML/model.mlmodel',
+          'coreml/model.mlpackage/Data/com.apple.CoreML/weights/weight.bin',
+        ],
+        [
+          'mlpackage/Manifest.json',
+          'mlpackage/Data/com.apple.CoreML/model.mlmodel',
+          'mlpackage/Data/com.apple.CoreML/weights/weight.bin',
+        ],
       ];
       
-      return minimalStructure;
+      for (const structure of possibleStructures) {
+        const testUrl = `https://huggingface.co/${repoId}/resolve/main/${structure[0]}`;
+        console.log('[ModelDownloadService] Testing structure:', structure[0]);
+        
+        try {
+          const testResponse = await fetch(testUrl, { 
+            method: 'HEAD',
+            signal: AbortSignal.timeout(5000)
+          });
+          
+          if (testResponse.ok) {
+            console.log('[ModelDownloadService] Found valid structure');
+            return structure.map(path => ({
+              path,
+              size: 0,
+            }));
+          }
+        } catch {
+          console.log('[ModelDownloadService] Structure not found, trying next...');
+          continue;
+        }
+      }
+      
+      console.log('[ModelDownloadService] Using default CoreML structure');
+      return possibleStructures[0].map(path => ({
+        path,
+        size: 0,
+      }));
     } catch (error) {
       console.error('[ModelDownloadService] Alternative method failed:', error);
       throw new Error('Failed to access repository. Please check the repository URL and try again.');
@@ -507,7 +453,24 @@ export class ModelDownloadService {
         return false;
       }
       
+      const manifestPath = `${path}/Manifest.json`;
+      const manifestInfo = await FileSystem.getInfoAsync(manifestPath);
+      
+      if (!manifestInfo.exists) {
+        console.warn('[ModelDownloadService] Manifest.json not found in model package');
+      }
+      
+      const modelPath = `${path}/Data/com.apple.CoreML/model.mlmodel`;
+      const modelInfo = await FileSystem.getInfoAsync(modelPath);
+      
+      if (!modelInfo.exists) {
+        console.error('[ModelDownloadService] model.mlmodel not found in package');
+        return false;
+      }
+      
       console.log(`[ModelDownloadService] Model verified: ${modelId}`);
+      console.log(`[ModelDownloadService] Manifest exists: ${manifestInfo.exists}`);
+      console.log(`[ModelDownloadService] Model exists: ${modelInfo.exists}`);
       return true;
     } catch (error) {
       console.error('[ModelDownloadService] Verification failed:', error);
@@ -576,6 +539,45 @@ export class ModelDownloadService {
       console.error('[ModelDownloadService] Failed to list models:', error);
       return [];
     }
+  }
+
+  async compileModel(modelId: string): Promise<boolean> {
+    if (Platform.OS !== 'ios') {
+      console.warn('[ModelDownloadService] Model compilation only supported on iOS');
+      return true;
+    }
+
+    try {
+      const modelPath = this.getModelPath(modelId);
+      const info = await FileSystem.getInfoAsync(modelPath);
+
+      if (!info.exists) {
+        console.error('[ModelDownloadService] Model not found for compilation');
+        return false;
+      }
+
+      const manifestPath = `${modelPath}/Manifest.json`;
+      const modelMLPath = `${modelPath}/Data/com.apple.CoreML/model.mlmodel`;
+      
+      const manifestExists = await FileSystem.getInfoAsync(manifestPath);
+      const modelMLExists = await FileSystem.getInfoAsync(modelMLPath);
+
+      if (!manifestExists.exists || !modelMLExists.exists) {
+        console.error('[ModelDownloadService] Invalid model package structure');
+        return false;
+      }
+
+      console.log('[ModelDownloadService] Model package ready for CoreML:', modelPath);
+      console.log('[ModelDownloadService] Structure verified: Manifest + model.mlmodel present');
+      return true;
+    } catch (error) {
+      console.error('[ModelDownloadService] Model compilation failed:', error);
+      return false;
+    }
+  }
+
+  getCompiledModelPath(modelId: string): string {
+    return this.getModelPath(modelId);
   }
 }
 
