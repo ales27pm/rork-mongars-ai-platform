@@ -366,10 +366,17 @@ public class DolphinCoreMLModule: Module {
     let seed = payload["seed"] as? UInt64 ?? mlxEngineConfig.seed
     let maxCache = payload["maxCacheEntries"] as? Int ?? mlxEngineConfig.maxCacheEntries
 
-    let modelId = payload["modelId"] as? String ?? mlxEngineConfig.modelId
-    let revision = payload["revision"] as? String ?? mlxEngineConfig.revision
-    let tokenizerId = payload["tokenizerId"] as? String ?? mlxEngineConfig.tokenizerId
-    let localModelPath = payload["localModelPath"] as? String ?? mlxEngineConfig.localModelPath
+    let modelIdRaw = payload["modelId"] as? String
+    let modelId = (modelIdRaw?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? mlxEngineConfig.modelId
+
+    let revisionRaw = payload["revision"] as? String
+    let revision = (revisionRaw?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? mlxEngineConfig.revision
+
+    let tokenizerIdRaw = payload["tokenizerId"] as? String
+    let tokenizerId = (tokenizerIdRaw?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? mlxEngineConfig.tokenizerId
+
+    let localModelPathRaw = payload["localModelPath"] as? String
+    let localModelPath = (localModelPathRaw?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? mlxEngineConfig.localModelPath
 
     return MLXEngine.Configuration(
       vocabSize: vocab,
