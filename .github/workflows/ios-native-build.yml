@@ -94,11 +94,13 @@ jobs:
             --arg keyId "$ASC_API_KEY_KEY_ID" \
             --arg issuerId "$ASC_API_KEY_ISSUER_ID" \
             --arg ascAppId "$ASC_APP_ID" \
-            '.submit.production.ios |= (. // {}) \
-             | .submit.production.ios.ascApiKeyPath = "credentials/ios/appstoreconnect.p8" \
-             | .submit.production.ios.ascApiKeyId = $keyId \
-             | .submit.production.ios.ascApiKeyIssuerId = $issuerId \
-             | .submit.production.ios.ascAppId = $ascAppId' eas.json > eas.tmp && mv eas.tmp eas.json
+            '
+              .submit.production.ios |= (. // {}) |
+              .submit.production.ios.ascApiKeyPath = "credentials/ios/appstoreconnect.p8" |
+              .submit.production.ios.ascApiKeyId = $keyId |
+              .submit.production.ios.ascApiKeyIssuerId = $issuerId |
+              .submit.production.ios.ascAppId = $ascAppId
+            ' eas.json > eas.tmp && mv eas.tmp eas.json
 
       - name: "🔗 Configure EAS project"
         env:
