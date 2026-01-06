@@ -1,15 +1,11 @@
 diff --git a/node_modules/expo-modules-core/ios/JSI/EXJSIConversions.h b/node_modules/expo-modules-core/ios/JSI/EXJSIConversions.h
-index 6d9bcaa..0179981 100644
+index 6d9bcaa..55bc74b 100644
 --- a/node_modules/expo-modules-core/ios/JSI/EXJSIConversions.h
 +++ b/node_modules/expo-modules-core/ios/JSI/EXJSIConversions.h
-@@ -7,7 +7,25 @@
+@@ -7,7 +7,21 @@
  #import <jsi/jsi.h>
  
  #import <React/RCTBridgeModule.h>
-+
-+// React Native 0.83 relocated CallInvoker headers depending on the pod layout.
-+// Detect common locations and fall back to a forward declaration so the pointer
-+// types in this header remain valid without requiring the full definition.
 +#if __has_include(<ReactCommon/CallInvoker.h>)
  #import <ReactCommon/CallInvoker.h>
 +#elif __has_include(<React-callinvoker/ReactCommon/CallInvoker.h>)
@@ -28,21 +24,46 @@ index 6d9bcaa..0179981 100644
  
  using namespace facebook;
  using namespace react;
+diff --git a/node_modules/expo-modules-core/ios/JSI/EXJSIConversions.mm b/node_modules/expo-modules-core/ios/JSI/EXJSIConversions.mm
+index b33b454..8573134 100644
+--- a/node_modules/expo-modules-core/ios/JSI/EXJSIConversions.mm
++++ b/node_modules/expo-modules-core/ios/JSI/EXJSIConversions.mm
+@@ -1,6 +1,20 @@
+ // Copyright 2018-present 650 Industries. All rights reserved.
+ 
++#ifdef __cplusplus
++#if __has_include(<react/bridging/CallbackWrapper.h>)
+ #import <react/bridging/CallbackWrapper.h>
++#elif __has_include(<ReactCommon/bridging/CallbackWrapper.h>)
++#import <ReactCommon/bridging/CallbackWrapper.h>
++#elif __has_include(<React-bridging/ReactCommon/bridging/CallbackWrapper.h>)
++#import <React-bridging/ReactCommon/bridging/CallbackWrapper.h>
++#else
++namespace facebook {
++namespace react {
++class CallbackWrapper;
++} // namespace react
++} // namespace facebook
++#endif
++#endif
+ #import <ExpoModulesCore/EXJavaScriptValue.h>
+ #import <ExpoModulesCore/EXJavaScriptObject.h>
+ #import <ExpoModulesCore/EXJavaScriptWeakObject.h>
 diff --git a/node_modules/expo-modules-core/ios/JSI/EXJSIUtils.h b/node_modules/expo-modules-core/ios/JSI/EXJSIUtils.h
-index 407f57f..55a100a 100644
+index 407f57f..c99a48f 100644
 --- a/node_modules/expo-modules-core/ios/JSI/EXJSIUtils.h
 +++ b/node_modules/expo-modules-core/ios/JSI/EXJSIUtils.h
 @@ -6,7 +6,29 @@
  
  #import <jsi/jsi.h>
  #import <React/RCTBridgeModule.h>
++
 +#if __has_include(<ReactCommon/TurboModuleUtils.h>)
  #import <ReactCommon/TurboModuleUtils.h>
 +#elif __has_include(<react/nativemodule/core/ReactCommon/TurboModuleUtils.h>)
 +#import <react/nativemodule/core/ReactCommon/TurboModuleUtils.h>
 +#endif
 +
-+// CallInvoker header location differs across React Native 0.83+ pod layouts.
 +#if __has_include(<ReactCommon/CallInvoker.h>)
 +#import <ReactCommon/CallInvoker.h>
 +#elif __has_include(<React-callinvoker/ReactCommon/CallInvoker.h>)
@@ -62,16 +83,41 @@ index 407f57f..55a100a 100644
  #import <ExpoModulesCore/ObjectDeallocator.h>
  
  namespace jsi = facebook::jsi;
+diff --git a/node_modules/expo-modules-core/ios/JSI/EXJSIUtils.mm b/node_modules/expo-modules-core/ios/JSI/EXJSIUtils.mm
+index a566e53..8ef3d7f 100644
+--- a/node_modules/expo-modules-core/ios/JSI/EXJSIUtils.mm
++++ b/node_modules/expo-modules-core/ios/JSI/EXJSIUtils.mm
+@@ -2,6 +2,22 @@
+ 
+ #import <sstream>
+ 
++#ifdef __cplusplus
++#if __has_include(<react/bridging/CallbackWrapper.h>)
++#import <react/bridging/CallbackWrapper.h>
++#elif __has_include(<ReactCommon/bridging/CallbackWrapper.h>)
++#import <ReactCommon/bridging/CallbackWrapper.h>
++#elif __has_include(<React-bridging/ReactCommon/bridging/CallbackWrapper.h>)
++#import <React-bridging/ReactCommon/bridging/CallbackWrapper.h>
++#else
++namespace facebook {
++namespace react {
++class CallbackWrapper;
++} // namespace react
++} // namespace facebook
++#endif
++#endif
++
+ #import <ExpoModulesCore/EXJSIConversions.h>
+ #import <ExpoModulesCore/EXJSIUtils.h>
+ #import <ExpoModulesCore/JSIUtils.h>
 diff --git a/node_modules/expo-modules-core/ios/JSI/EXJavaScriptRuntime.h b/node_modules/expo-modules-core/ios/JSI/EXJavaScriptRuntime.h
-index a38de45..5089695 100644
+index a38de45..d48471e 100644
 --- a/node_modules/expo-modules-core/ios/JSI/EXJavaScriptRuntime.h
 +++ b/node_modules/expo-modules-core/ios/JSI/EXJavaScriptRuntime.h
 @@ -9,6 +9,22 @@
  
  #ifdef __cplusplus
  
-+// React Native 0.83 relocates CallInvoker; include from any known location or
-+// forward declare when not available to keep headers consumable from Objective-C.
 +#if __has_include(<ReactCommon/CallInvoker.h>)
 +#import <ReactCommon/CallInvoker.h>
 +#elif __has_include(<React-callinvoker/ReactCommon/CallInvoker.h>)
@@ -82,7 +128,9 @@ index a38de45..5089695 100644
 +#import <react/nativemodule/core/ReactCommon/CallInvoker.h>
 +#else
 +namespace facebook {
-+namespace react { class CallInvoker; }
++namespace react {
++class CallInvoker;
++} // namespace react
 +} // namespace facebook
 +#endif
 +
