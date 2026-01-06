@@ -16,6 +16,9 @@ env:
   IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}
   IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
   IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+  ASC_API_KEY_BASE64: ${{ secrets.ASC_API_KEY_BASE64 }}
+  ASC_API_KEY_KEY_ID: ${{ secrets.ASC_API_KEY_KEY_ID }}
+  ASC_API_KEY_ISSUER_ID: ${{ secrets.ASC_API_KEY_ISSUER_ID }}
   IOS_CONFIGURATION: "Release"
   DERIVED_DATA_PATH: "ios/build"
 
@@ -45,10 +48,13 @@ jobs:
           IOS_DIST_P12_BASE64: ${{ env.IOS_DIST_P12_BASE64 }}
           IOS_DIST_P12_PASSWORD: ${{ env.IOS_DIST_P12_PASSWORD }}
           IOS_PROFILE_BASE64: ${{ env.IOS_PROFILE_BASE64 }}
+          ASC_API_KEY_BASE64: ${{ env.ASC_API_KEY_BASE64 }}
+          ASC_API_KEY_KEY_ID: ${{ env.ASC_API_KEY_KEY_ID }}
+          ASC_API_KEY_ISSUER_ID: ${{ env.ASC_API_KEY_ISSUER_ID }}
         run: |
-          for var in IOS_DIST_P12_BASE64 IOS_DIST_P12_PASSWORD IOS_PROFILE_BASE64; do
+          for var in IOS_DIST_P12_BASE64 IOS_DIST_P12_PASSWORD IOS_PROFILE_BASE64 ASC_API_KEY_BASE64 ASC_API_KEY_KEY_ID ASC_API_KEY_ISSUER_ID; do
             if [ -z "${!var}" ]; then
-              echo "${var} secret is required to provision iOS credentials for non-interactive builds." >&2
+              echo "${var} secret is required to provision iOS credentials for non-interactive builds and App Store Connect submission." >&2
               exit 1
             fi
           done
@@ -56,6 +62,7 @@ jobs:
           mkdir -p credentials/ios
           echo "$IOS_DIST_P12_BASE64" | base64 --decode > credentials/ios/distribution.p12
           echo "$IOS_PROFILE_BASE64" | base64 --decode > credentials/ios/profile.mobileprovision
+          echo "$ASC_API_KEY_BASE64" | base64 --decode > credentials/ios/appstoreconnect.p8
 
           cat > credentials.json <<EOF
           {
@@ -68,6 +75,11 @@ jobs:
             }
           }
           EOF
+
+          jq \
+            --arg keyId "$ASC_API_KEY_KEY_ID" \
+            --arg issuerId "$ASC_API_KEY_ISSUER_ID" \
+            '.submit.production.ios = {ascApiKey: {path: "credentials/ios/appstoreconnect.p8", keyId: $keyId, issuerId: $issuerId}}' eas.json > eas.tmp && mv eas.tmp eas.json
 
       - name: "🔗 Configure EAS project"
         env:
@@ -96,7 +108,8 @@ jobs:
             --non-interactive \
             --wait \
             --message "CI signed build" \
-            --auto-submit
+            --auto-submit \
+            --auto-submit-with-profile production
 
       - name: "🗂️ Prepare artifacts"
         run: |
