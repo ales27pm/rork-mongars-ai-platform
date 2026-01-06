@@ -16,6 +16,10 @@ env:
   IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}
   IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
   IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+  ASC_API_KEY_BASE64: ${{ secrets.ASC_API_KEY_BASE64 }}
+  ASC_API_KEY_KEY_ID: ${{ secrets.ASC_API_KEY_KEY_ID }}
+  ASC_API_KEY_ISSUER_ID: ${{ secrets.ASC_API_KEY_ISSUER_ID }}
+  ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
   IOS_CONFIGURATION: "Release"
   DERIVED_DATA_PATH: "ios/build"
 
@@ -45,10 +49,16 @@ jobs:
           IOS_DIST_P12_BASE64: ${{ env.IOS_DIST_P12_BASE64 }}
           IOS_DIST_P12_PASSWORD: ${{ env.IOS_DIST_P12_PASSWORD }}
           IOS_PROFILE_BASE64: ${{ env.IOS_PROFILE_BASE64 }}
+          ASC_API_KEY_BASE64: ${{ env.ASC_API_KEY_BASE64 }}
+          ASC_API_KEY_KEY_ID: ${{ env.ASC_API_KEY_KEY_ID }}
+          ASC_API_KEY_ISSUER_ID: ${{ env.ASC_API_KEY_ISSUER_ID }}
+          ASC_APP_ID: ${{ env.ASC_APP_ID }}
         run: |
-          for var in IOS_DIST_P12_BASE64 IOS_DIST_P12_PASSWORD IOS_PROFILE_BASE64; do
-            if [ -z "${!var}" ]; then
-              echo "${var} secret is required to provision iOS credentials for non-interactive builds." >&2
+          set -euo pipefail
+
+          for var in IOS_DIST_P12_BASE64 IOS_DIST_P12_PASSWORD IOS_PROFILE_BASE64 ASC_API_KEY_BASE64 ASC_API_KEY_KEY_ID ASC_API_KEY_ISSUER_ID ASC_APP_ID; do
+            if [ -z "${!var:-}" ]; then
+              echo "${var} secret is required to provision iOS credentials for non-interactive builds and App Store Connect submission." >&2
               exit 1
             fi
           done
@@ -56,6 +66,7 @@ jobs:
           mkdir -p credentials/ios
           echo "$IOS_DIST_P12_BASE64" | base64 --decode > credentials/ios/distribution.p12
           echo "$IOS_PROFILE_BASE64" | base64 --decode > credentials/ios/profile.mobileprovision
+          echo "$ASC_API_KEY_BASE64" | base64 --decode > credentials/ios/appstoreconnect.p8
 
           cat > credentials.json <<EOF
           {
@@ -68,6 +79,28 @@ jobs:
             }
           }
           EOF
+
+          if [ ! -f eas.json ]; then
+            if [ -f "eas (2).json" ]; then
+              echo "eas.json not found; copying from 'eas (2).json' for CI patching."
+              cp "eas (2).json" eas.json
+            else
+              echo "eas.json not found in repository root." >&2
+              exit 1
+            fi
+          fi
+
+          jq \
+            --arg keyId "$ASC_API_KEY_KEY_ID" \
+            --arg issuerId "$ASC_API_KEY_ISSUER_ID" \
+            --arg ascAppId "$ASC_APP_ID" \
+            '
+              .submit.production.ios |= (. // {}) |
+              .submit.production.ios.ascApiKeyPath = "credentials/ios/appstoreconnect.p8" |
+              .submit.production.ios.ascApiKeyId = $keyId |
+              .submit.production.ios.ascApiKeyIssuerId = $issuerId |
+              .submit.production.ios.ascAppId = $ascAppId
+            ' eas.json > eas.tmp && mv eas.tmp eas.json
 
       - name: "🔗 Configure EAS project"
         env:
@@ -96,12 +129,12 @@ jobs:
             --non-interactive \
             --wait \
             --message "CI signed build" \
-            --auto-submit
+            --auto-submit-with-profile production
 
       - name: "🗂️ Prepare artifacts"
         run: |
           mkdir -p artifacts/ios
-          eas build:download --platform ios --latest --output artifacts/ios
+          eas build:download --platform ios --profile production --latest --path artifacts/ios
 
       - name: "📤 Upload iOS build artifacts"
         uses: actions/upload-artifact@v4
