@@ -154,9 +154,10 @@ public actor MLXEngine {
       }
 
       let pooled = output.logits.mean(axis: 0, keepDims: false)
-      let floatValues = pooled.asArray(Float.self)
+      let pooledSlice = pooled[0..<min(targetDim, pooled.shape[0])]
+      let floatValues = pooledSlice.asArray(Float.self)
 
-      var doubleValues = floatValues.prefix(targetDim).map { Double($0) }
+      var doubleValues = floatValues.map { Double($0) }
       if doubleValues.count < targetDim {
         doubleValues.append(contentsOf: repeatElement(0.0, count: targetDim - doubleValues.count))
       }
