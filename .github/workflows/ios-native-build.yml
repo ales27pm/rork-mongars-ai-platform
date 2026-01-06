@@ -19,6 +19,7 @@ env:
   ASC_API_KEY_BASE64: ${{ secrets.ASC_API_KEY_BASE64 }}
   ASC_API_KEY_KEY_ID: ${{ secrets.ASC_API_KEY_KEY_ID }}
   ASC_API_KEY_ISSUER_ID: ${{ secrets.ASC_API_KEY_ISSUER_ID }}
+  ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
   IOS_CONFIGURATION: "Release"
   DERIVED_DATA_PATH: "ios/build"
 
@@ -51,9 +52,12 @@ jobs:
           ASC_API_KEY_BASE64: ${{ env.ASC_API_KEY_BASE64 }}
           ASC_API_KEY_KEY_ID: ${{ env.ASC_API_KEY_KEY_ID }}
           ASC_API_KEY_ISSUER_ID: ${{ env.ASC_API_KEY_ISSUER_ID }}
+          ASC_APP_ID: ${{ env.ASC_APP_ID }}
         run: |
-          for var in IOS_DIST_P12_BASE64 IOS_DIST_P12_PASSWORD IOS_PROFILE_BASE64 ASC_API_KEY_BASE64 ASC_API_KEY_KEY_ID ASC_API_KEY_ISSUER_ID; do
-            if [ -z "${!var}" ]; then
+          set -euo pipefail
+
+          for var in IOS_DIST_P12_BASE64 IOS_DIST_P12_PASSWORD IOS_PROFILE_BASE64 ASC_API_KEY_BASE64 ASC_API_KEY_KEY_ID ASC_API_KEY_ISSUER_ID ASC_APP_ID; do
+            if [ -z "${!var:-}" ]; then
               echo "${var} secret is required to provision iOS credentials for non-interactive builds and App Store Connect submission." >&2
               exit 1
             fi
@@ -76,10 +80,25 @@ jobs:
           }
           EOF
 
+          if [ ! -f eas.json ]; then
+            if [ -f "eas (2).json" ]; then
+              echo "eas.json not found; copying from 'eas (2).json' for CI patching."
+              cp "eas (2).json" eas.json
+            else
+              echo "eas.json not found in repository root." >&2
+              exit 1
+            fi
+          fi
+
           jq \
             --arg keyId "$ASC_API_KEY_KEY_ID" \
             --arg issuerId "$ASC_API_KEY_ISSUER_ID" \
-            '.submit.production.ios |= (. // {}) | .submit.production.ios.ascApiKeyPath = "credentials/ios/appstoreconnect.p8" | .submit.production.ios.ascApiKeyId = $keyId | .submit.production.ios.ascApiKeyIssuerId = $issuerId' eas.json > eas.tmp && mv eas.tmp eas.json
+            --arg ascAppId "$ASC_APP_ID" \
+            '.submit.production.ios |= (. // {}) \
+             | .submit.production.ios.ascApiKeyPath = "credentials/ios/appstoreconnect.p8" \
+             | .submit.production.ios.ascApiKeyId = $keyId \
+             | .submit.production.ios.ascApiKeyIssuerId = $issuerId \
+             | .submit.production.ios.ascAppId = $ascAppId' eas.json > eas.tmp && mv eas.tmp eas.json
 
       - name: "🔗 Configure EAS project"
         env:
