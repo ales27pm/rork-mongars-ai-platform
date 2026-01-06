@@ -1,284 +1,384 @@
-import createContextHook from "@nkzw/create-context-hook";
-import * as Calendar from "expo-calendar";
-import { useCallback, useEffect, useState } from "react";
-import { Platform } from "react-native";
-import type { AgentTool } from "@/types";
+import { useState, useEffect } from 'react';
+import * as Calendar from 'expo-calendar';
+import { Platform } from 'react-native';
+import createContextHook from '@nkzw/create-context-hook';
 
-interface CalendarEvent {
+export interface CalendarEvent {
   id: string;
   title: string;
-  startDate: string;
-  endDate: string;
-  location?: string;
-  notes?: string;
+  startDate: Date;
+  endDate: Date;
+  location?: string | null;
+  notes?: string | null;
   allDay: boolean;
+  calendarId: string;
 }
 
-interface CalendarContextValue {
-  events: CalendarEvent[];
-  permissionStatus: "unknown" | "granted" | "denied" | "unavailable";
-  loading: boolean;
-  error: string | null;
-  calendarSharingAllowed: boolean;
-  setCalendarSharingAllowed: (allowed: boolean) => void;
-  requestPermission: () => Promise<boolean>;
-  refreshEvents: (startDate: Date, endDate: Date) => Promise<CalendarEvent[]>;
-  searchEvents: (query: string, startDate?: Date, endDate?: Date) => Promise<CalendarEvent[]>;
-  calendarSearchTool: AgentTool<
-    { query?: string; startDate?: string; endDate?: string },
-    { results: CalendarEvent[]; error?: string }
-  >;
-  calendarCreateTool: AgentTool<
-    { title: string; startDate: string; endDate: string; location?: string; notes?: string },
-    { success: boolean; eventId?: string; error?: string }
-  >;
+export interface AgentTool {
+  name: string;
+  description: string;
+  parameters: {
+    type: string;
+    properties: Record<string, any>;
+    required: string[];
+  };
+  execute: (params: any) => Promise<any>;
 }
 
-export const [CalendarProvider, useCalendar] = createContextHook<CalendarContextValue>(() => {
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [permissionStatus, setPermissionStatus] = useState<"unknown" | "granted" | "denied" | "unavailable">("unknown");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export const [CalendarProvider, useCalendar] = createContextHook(() => {
+  const [hasPermission, setHasPermission] = useState(false);
+  const [permissionStatus, setPermissionStatus] = useState<'undetermined' | 'denied' | 'granted'>('undetermined');
+  const [calendars, setCalendars] = useState<Calendar.Calendar[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [calendarSharingAllowed, setCalendarSharingAllowed] = useState(false);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
-      if (Platform.OS === "web") {
-        setPermissionStatus("unavailable");
-        return;
-      }
-
-      try {
-        const { status } = await Calendar.getCalendarPermissionsAsync();
-        setPermissionStatus(status === Calendar.PermissionStatus.GRANTED ? "granted" : "denied");
-      } catch (err) {
-        console.error("[Calendar] Failed to check permissions", err);
-        setPermissionStatus("unavailable");
-      }
-    })();
+    checkPermission();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const requestPermission = useCallback(async () => {
-    if (Platform.OS === "web") {
-      setPermissionStatus("unavailable");
-      setError("Calendar is not available on web");
+  const checkPermission = async () => {
+    if (Platform.OS === 'web') {
+      setPermissionStatus('denied');
+      return;
+    }
+
+    try {
+      const { status } = await Calendar.getCalendarPermissionsAsync();
+      setHasPermission(status === 'granted');
+      setPermissionStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined');
+      
+      if (status === 'granted') {
+        await loadCalendars();
+      }
+    } catch (error) {
+      console.error('[CalendarProvider] Error checking permission:', error);
+      setPermissionStatus('denied');
+    }
+  };
+
+  const requestPermission = async (): Promise<boolean> => {
+    if (Platform.OS === 'web') {
+      console.log('[CalendarProvider] Calendar not supported on web');
       return false;
     }
 
     try {
       const { status } = await Calendar.requestCalendarPermissionsAsync();
-      const granted = status === Calendar.PermissionStatus.GRANTED;
-      setPermissionStatus(granted ? "granted" : "denied");
-      if (granted) setError(null);
+      const granted = status === 'granted';
+      setHasPermission(granted);
+      setPermissionStatus(granted ? 'granted' : 'denied');
+      
+      if (granted) {
+        await loadCalendars();
+      }
+      
       return granted;
-    } catch (err) {
-      console.error("[Calendar] Failed to request permission", err);
-      setPermissionStatus("denied");
-      setError("Unable to request calendar permission");
+    } catch (error) {
+      console.error('[CalendarProvider] Error requesting permission:', error);
+      setPermissionStatus('denied');
       return false;
     }
-  }, []);
+  };
 
-  const refreshEvents = useCallback(async (startDate: Date, endDate: Date): Promise<CalendarEvent[]> => {
-    if (Platform.OS === "web") {
-      setEvents([]);
-      setPermissionStatus("unavailable");
-      setError("Calendar is not available on web");
-      return [];
+  const loadCalendars = async () => {
+    if (!hasPermission) return;
+
+    try {
+      const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+      setCalendars(cals);
+      console.log('[CalendarProvider] Loaded calendars:', cals.length);
+    } catch (error) {
+      console.error('[CalendarProvider] Error loading calendars:', error);
     }
+  };
 
-    setLoading(true);
-    setError(null);
-
-    const granted = permissionStatus === "granted" || await requestPermission();
-    if (!granted) {
-      setLoading(false);
-      setEvents([]);
+  const getEvents = async (
+    startDate: Date,
+    endDate: Date,
+    calendarIds?: string[]
+  ): Promise<CalendarEvent[]> => {
+    if (!hasPermission) {
+      console.warn('[CalendarProvider] No calendar permission');
       return [];
     }
 
     try {
-      const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+      const ids = calendarIds || calendars.map(c => c.id);
+      const events = await Calendar.getEventsAsync(ids, startDate, endDate);
       
-      if (calendars.length === 0) {
-        console.log("[Calendar] No calendars found");
-        setEvents([]);
-        setLoading(false);
-        return [];
-      }
-
-      const calendarIds = calendars.map(cal => cal.id);
-      const fetchedEvents = await Calendar.getEventsAsync(calendarIds, startDate, endDate);
-
-      const normalizedEvents: CalendarEvent[] = fetchedEvents.map(event => ({
+      const mappedEvents = events.map(event => ({
         id: event.id,
         title: event.title,
-        startDate: typeof event.startDate === 'string' ? event.startDate : event.startDate.toISOString(),
-        endDate: typeof event.endDate === 'string' ? event.endDate : event.endDate.toISOString(),
-        location: event.location || undefined,
-        notes: event.notes || undefined,
-        allDay: event.allDay || false,
+        startDate: new Date(event.startDate),
+        endDate: new Date(event.endDate),
+        location: event.location ?? null,
+        notes: event.notes ?? null,
+        allDay: event.allDay,
+        calendarId: event.calendarId
       }));
-
-      setEvents(normalizedEvents);
-      return normalizedEvents;
-    } catch (err) {
-      console.error("[Calendar] Failed to load events", err);
-      setError("Failed to load calendar events. Please try again.");
+      
+      setEvents(mappedEvents);
+      return mappedEvents;
+    } catch (error) {
+      console.error('[CalendarProvider] Error getting events:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load events');
       return [];
-    } finally {
-      setLoading(false);
     }
-  }, [permissionStatus, requestPermission]);
-
-  const searchEvents = useCallback(async (query: string, startDate?: Date, endDate?: Date): Promise<CalendarEvent[]> => {
-    const start = startDate || new Date();
-    const end = endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-    const allEvents = await refreshEvents(start, end);
-    
-    if (!query.trim()) {
-      return allEvents;
-    }
-
-    const normalizedQuery = query.toLowerCase();
-    return allEvents.filter(event => 
-      event.title.toLowerCase().includes(normalizedQuery) ||
-      (event.location && event.location.toLowerCase().includes(normalizedQuery)) ||
-      (event.notes && event.notes.toLowerCase().includes(normalizedQuery))
-    );
-  }, [refreshEvents]);
-
-  const calendarSearchTool: CalendarContextValue["calendarSearchTool"] = {
-    name: "calendar_search",
-    description: "Searches calendar events by title, location, or notes within a date range when calendar sharing is enabled",
-    parameters: {
-      type: "object",
-      properties: {
-        query: {
-          type: "string",
-          description: "Search term to find in event titles, locations, or notes (optional)",
-        },
-        startDate: {
-          type: "string",
-          description: "Start date in ISO format (defaults to today)",
-        },
-        endDate: {
-          type: "string",
-          description: "End date in ISO format (defaults to 30 days from now)",
-        },
-      },
-      required: [],
-    },
-    execute: async ({ query = "", startDate, endDate }) => {
-      if (Platform.OS === "web") {
-        return { results: [], error: "Calendar is not available on web" };
-      }
-
-      if (!calendarSharingAllowed) {
-        return {
-          results: [],
-          error: "Calendar sharing with the AI model is disabled by the user",
-        };
-      }
-
-      const granted = permissionStatus === "granted" || await requestPermission();
-      if (!granted) {
-        return { results: [], error: "Calendar permission not granted" };
-      }
-
-      try {
-        const start = startDate ? new Date(startDate) : new Date();
-        const end = endDate ? new Date(endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        const results = await searchEvents(query, start, end);
-        return { results };
-      } catch (err) {
-        return { results: [], error: err instanceof Error ? err.message : "Failed to search calendar" };
-      }
-    },
   };
 
-  const calendarCreateTool: CalendarContextValue["calendarCreateTool"] = {
-    name: "calendar_create",
-    description: "Creates a new calendar event when calendar access is enabled",
+  const refreshEvents = async (startDate: Date, endDate: Date) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await getEvents(startDate, endDate);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const searchEvents = async (
+    query: string,
+    daysAhead: number = 30
+  ): Promise<CalendarEvent[]> => {
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + daysAhead);
+
+    const events = await getEvents(startDate, endDate);
+    
+    if (!query.trim()) return events;
+
+    const lowerQuery = query.toLowerCase();
+    return events.filter(event => 
+      event.title.toLowerCase().includes(lowerQuery) ||
+      event.location?.toLowerCase().includes(lowerQuery) ||
+      event.notes?.toLowerCase().includes(lowerQuery)
+    );
+  };
+
+  const createEvent = async (
+    calendarId: string,
+    title: string,
+    startDate: Date,
+    endDate: Date,
+    options?: {
+      location?: string;
+      notes?: string;
+      allDay?: boolean;
+    }
+  ): Promise<string | null> => {
+    if (!hasPermission) {
+      console.warn('[CalendarProvider] No calendar permission');
+      return null;
+    }
+
+    try {
+      const eventId = await Calendar.createEventAsync(calendarId, {
+        title,
+        startDate,
+        endDate,
+        location: options?.location,
+        notes: options?.notes,
+        allDay: options?.allDay ?? false,
+        timeZone: 'GMT'
+      });
+      
+      console.log('[CalendarProvider] Event created:', eventId);
+      return eventId;
+    } catch (error) {
+      console.error('[CalendarProvider] Error creating event:', error);
+      return null;
+    }
+  };
+
+  const calendarSearchTool: AgentTool = {
+    name: 'calendar_search',
+    description: 'Searches device calendar events by keyword or date range. Returns upcoming events when sharing is enabled. Use this to check the user\'s schedule, find meetings, or answer questions about their availability.',
     parameters: {
-      type: "object",
+      type: 'object',
       properties: {
-        title: {
-          type: "string",
-          description: "Event title",
+        query: {
+          type: 'string',
+          description: 'Search term to filter events (title, location, notes)'
         },
-        startDate: {
-          type: "string",
-          description: "Start date/time in ISO format",
-        },
-        endDate: {
-          type: "string",
-          description: "End date/time in ISO format",
-        },
-        location: {
-          type: "string",
-          description: "Event location (optional)",
-        },
-        notes: {
-          type: "string",
-          description: "Event notes (optional)",
-        },
+        daysAhead: {
+          type: 'number',
+          description: 'Number of days to look ahead (default: 30)'
+        }
       },
-      required: ["title", "startDate", "endDate"],
+      required: []
     },
-    execute: async ({ title, startDate, endDate, location, notes }) => {
-      if (Platform.OS === "web") {
-        return { success: false, error: "Calendar is not available on web" };
-      }
+    execute: async (params: { query?: string; daysAhead?: number }) => {
+      console.log('[CalendarTool] Executing calendar_search with params:', params);
 
       if (!calendarSharingAllowed) {
         return {
-          success: false,
-          error: "Calendar access is disabled by the user",
+          error: 'Calendar access not enabled',
+          message: 'User has not granted calendar sharing permission to AI'
         };
       }
 
-      const granted = permissionStatus === "granted" || await requestPermission();
-      if (!granted) {
-        return { success: false, error: "Calendar permission not granted" };
+      if (permissionStatus !== 'granted') {
+        return {
+          error: 'Permission denied',
+          message: 'Calendar permission not granted by system'
+        };
       }
 
+      setIsLoading(true);
       try {
-        const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-        const defaultCalendar = calendars.find(cal => cal.allowsModifications) || calendars[0];
+        const events = await searchEvents(
+          params.query || '',
+          params.daysAhead || 30
+        );
 
-        if (!defaultCalendar) {
-          return { success: false, error: "No writable calendar found" };
+        return {
+          success: true,
+          count: events.length,
+          events: events.map(e => ({
+            id: e.id,
+            title: e.title,
+            startDate: e.startDate.toISOString(),
+            endDate: e.endDate.toISOString(),
+            location: e.location,
+            allDay: e.allDay,
+            notes: e.notes
+          }))
+        };
+      } catch (error) {
+        return {
+          error: 'Search failed',
+          message: error instanceof Error ? error.message : 'Unknown error'
+        };
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  const calendarCreateTool: AgentTool = {
+    name: 'calendar_create',
+    description: 'Creates a new calendar event. Use this to schedule meetings, appointments, or reminders when requested by the user.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Event title'
+        },
+        startDate: {
+          type: 'string',
+          description: 'Start date/time in ISO format'
+        },
+        endDate: {
+          type: 'string',
+          description: 'End date/time in ISO format'
+        },
+        location: {
+          type: 'string',
+          description: 'Event location'
+        },
+        notes: {
+          type: 'string',
+          description: 'Additional notes'
+        },
+        allDay: {
+          type: 'boolean',
+          description: 'Whether this is an all-day event'
+        }
+      },
+      required: ['title', 'startDate', 'endDate']
+    },
+    execute: async (params: {
+      title: string;
+      startDate: string;
+      endDate: string;
+      location?: string;
+      notes?: string;
+      allDay?: boolean;
+    }) => {
+      console.log('[CalendarTool] Executing calendar_create with params:', params);
+
+      if (!calendarSharingAllowed) {
+        return {
+          error: 'Calendar access not enabled',
+          message: 'User has not granted calendar sharing permission to AI'
+        };
+      }
+
+      if (permissionStatus !== 'granted') {
+        return {
+          error: 'Permission denied',
+          message: 'Calendar permission not granted by system'
+        };
+      }
+
+      if (calendars.length === 0) {
+        return {
+          error: 'No calendars available',
+          message: 'No calendars found on device'
+        };
+      }
+
+      const defaultCalendar = calendars.find(c => c.allowsModifications) || calendars[0];
+
+      setIsLoading(true);
+      try {
+        const eventId = await createEvent(
+          defaultCalendar.id,
+          params.title,
+          new Date(params.startDate),
+          new Date(params.endDate),
+          {
+            location: params.location,
+            notes: params.notes,
+            allDay: params.allDay
+          }
+        );
+
+        if (!eventId) {
+          return {
+            error: 'Creation failed',
+            message: 'Failed to create calendar event'
+          };
         }
 
-        const eventId = await Calendar.createEventAsync(defaultCalendar.id, {
-          title,
-          startDate: new Date(startDate),
-          endDate: new Date(endDate),
-          location,
-          notes,
-        });
-
-        return { success: true, eventId };
-      } catch (err) {
-        console.error("[Calendar] Failed to create event", err);
-        return { success: false, error: err instanceof Error ? err.message : "Failed to create event" };
+        return {
+          success: true,
+          eventId,
+          message: `Event "${params.title}" created successfully`
+        };
+      } catch (error) {
+        return {
+          error: 'Creation failed',
+          message: error instanceof Error ? error.message : 'Unknown error'
+        };
+      } finally {
+        setIsLoading(false);
       }
-    },
+    }
   };
 
   return {
-    events,
+    hasPermission,
     permissionStatus,
-    loading,
+    calendars,
+    isLoading,
+    loading: isLoading,
+    events,
     error,
     calendarSharingAllowed,
     setCalendarSharingAllowed,
     requestPermission,
+    refreshCalendars: loadCalendars,
     refreshEvents,
+    getEvents,
     searchEvents,
+    createEvent,
     calendarSearchTool,
-    calendarCreateTool,
+    calendarCreateTool
   };
 });

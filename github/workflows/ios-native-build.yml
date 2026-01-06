@@ -1,0 +1,122 @@
+name: iOS Native Build & Submit
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - development
+      auto_submit:
+        description: 'Auto-submit to App Store'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  build:
+    name: Build iOS App
+    runs-on: macos-14
+    timeout-minutes: 90
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure iOS Credentials
+        env:
+          DISTRIBUTION_CERTIFICATE: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE }}
+          DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          mkdir -p credentials/ios
+          echo "$DISTRIBUTION_CERTIFICATE" | base64 -d > credentials/ios/distribution.p12
+          echo "$PROVISIONING_PROFILE" | base64 -d > credentials/ios/profile.mobileprovision
+          echo "$ASC_API_KEY" | base64 -d > credentials/ios/appstoreconnect.p8
+
+      - name: Build iOS App
+        run: |
+          eas build --platform ios \
+            --profile ${{ inputs.build_type }} \
+            --non-interactive \
+            --no-wait \
+            --output build-output.json
+
+      - name: Wait for Build
+        run: |
+          BUILD_ID=$(cat build-output.json | jq -r '.id')
+          echo "Build ID: $BUILD_ID"
+          
+          while true; do
+            STATUS=$(eas build:view $BUILD_ID --json | jq -r '.status')
+            echo "Build status: $STATUS"
+            
+            if [ "$STATUS" = "finished" ]; then
+              echo "Build completed successfully"
+              break
+            elif [ "$STATUS" = "errored" ] || [ "$STATUS" = "canceled" ]; then
+              echo "Build failed with status: $STATUS"
+              exit 1
+            fi
+            
+            sleep 30
+          done
+
+      - name: Download Build Artifact
+        run: |
+          BUILD_ID=$(cat build-output.json | jq -r '.id')
+          eas build:download --id $BUILD_ID --output ./build.ipa
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-app-${{ github.sha }}
+          path: build.ipa
+          retention-days: 30
+
+      - name: Submit to App Store
+        if: inputs.auto_submit == true && inputs.build_type == 'production'
+        env:
+          ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
+        run: |
+          BUILD_ID=$(cat build-output.json | jq -r '.id')
+          eas submit --platform ios \
+            --profile production \
+            --id $BUILD_ID \
+            --non-interactive
+
+      - name: Notify Success
+        if: success()
+        run: |
+          echo "✅ iOS build and submission completed successfully"
+          echo "Build SHA: ${{ github.sha }}"
+          echo "Build Type: ${{ inputs.build_type }}"
+
+      - name: Cleanup Credentials
+        if: always()
+        run: |
+          rm -rf credentials/ios

@@ -38,7 +38,7 @@ export class TransformerEmbeddingService {
     return TransformerEmbeddingService.instance;
   }
 
-  async initialize(modelName: keyof typeof MODELS = 'all-MiniLM-L6-v2'): Promise<boolean> {
+  async initialize(modelName: keyof typeof MODELS = 'all-MiniLM-L6-v2', enableRealModel = true): Promise<boolean> {
     if (this.isInitialized) {
       console.log('[TransformerEmbeddings] Already initialized');
       return true;
@@ -55,22 +55,35 @@ export class TransformerEmbeddingService {
     this.isInitializing = true;
     this.modelConfig = MODELS[modelName];
 
+    if (!enableRealModel) {
+      console.log('[TransformerEmbeddings] Real model disabled, using fallback embeddings');
+      this.isInitialized = true;
+      this.isInitializing = false;
+      return true;
+    }
+
     console.log(`[TransformerEmbeddings] Initializing ${this.modelConfig.name}`);
 
     try {
-      const { pipeline } = await import('@xenova/transformers');
+      const { pipeline, env } = await import('@xenova/transformers');
+      
+      env.allowLocalModels = false;
+      env.allowRemoteModels = true;
+      
       console.log('[TransformerEmbeddings] Loading transformer pipeline...');
       
       this.pipeline = await pipeline('feature-extraction', this.modelConfig.name, {
         progress_callback: (progress: any) => {
           if (progress.status === 'progress') {
             console.log(`[TransformerEmbeddings] Download progress: ${Math.round(progress.progress || 0)}%`);
+          } else if (progress.status === 'done') {
+            console.log(`[TransformerEmbeddings] Downloaded: ${progress.file}`);
           }
         },
       });
       
       this.isInitialized = true;
-      console.log('[TransformerEmbeddings] Initialization complete');
+      console.log('[TransformerEmbeddings] Initialization complete with real model');
       return true;
     } catch (error) {
       console.error('[TransformerEmbeddings] Initialization failed:', error);

@@ -51,7 +51,11 @@ export default function CameraScreen() {
   const handlePickImage = useCallback(async () => {
     const image = await pickImage();
     if (image) {
-      setCapturedImage(image);
+      if (Array.isArray(image)) {
+        setCapturedImage(image[0]);
+      } else {
+        setCapturedImage(image);
+      }
     }
   }, [pickImage]);
 

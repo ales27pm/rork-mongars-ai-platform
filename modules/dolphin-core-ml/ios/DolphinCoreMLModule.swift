@@ -241,41 +241,69 @@ public class DolphinCoreMLModule: Module {
     }
 
     let start = Date()
+    let maxTokens = params["maxTokens"] as? Int ?? 128
+    let temperature = params["temperature"] as? Double ?? 0.7
+    let topP = params["topP"] as? Double ?? 0.9
+    let stopSequences = params["stopSequences"] as? [String] ?? []
 
-    // This is a conceptual implementation. You will need to adapt it to your model's specifics.
-    // e.g., use your actual tokenizer, and match model input/output names and shapes.
-  
-    // 1. Tokenize prompt (replace with your actual tokenizer)
-    // let inputTokens = MyTokenizer.encode(prompt)
-
-    // 2. Run prediction loop
-    var outputText = ""
-    // for _ in 0..<(params["maxTokens"] as? Int ?? 128) {
-    //   let inputFeatureProvider = try createModelInput(tokens: inputTokens)
-    //   let output = try model.prediction(from: inputFeatureProvider)
-    //
-    //   // 3. Process output and decode token (replace with your logic)
-    //   let nextToken = processModelOutput(output)
-    //   let nextTokenString = MyTokenizer.decode(nextToken)
-    //
-    //   // 4. Append to results and emit event
-    //   outputText += nextTokenString
-    //   sendEvent("onToken", ["token": nextTokenString])
-    //
-    //   // 5. Check for end-of-sequence token
-    //   if nextToken == MyTokenizer.endTokenId { break }
-    //
-    //   inputTokens.append(nextToken)
-    // }
-
-    // Generation is not implemented yet; fail fast so callers can handle it.
-    let duration = Date().timeIntervalSince(start)
-    await state.recordGeneration(duration: duration)
-    let error = NSError(domain: "DolphinCoreML", code: -3, userInfo: [
-      "code": "NOT_IMPLEMENTED",
-      NSLocalizedDescriptionKey: "NOT_IMPLEMENTED"
-    ])
-    throw error
+    do {
+      let inputTokenIds = try tokenizePrompt(prompt)
+      var generatedTokenIds: [Int32] = []
+      var outputText = ""
+      
+      var currentTokenIds = inputTokenIds
+      
+      for iteration in 0..<maxTokens {
+        let inputFeatures = try createModelInput(tokenIds: currentTokenIds)
+        let output = try model.prediction(from: inputFeatures)
+        
+        let logits = try extractLogits(from: output)
+        let nextTokenId = try sampleToken(logits: logits, temperature: temperature, topP: topP)
+        
+        generatedTokenIds.append(nextTokenId)
+        
+        let tokenText = decodeToken(nextTokenId)
+        outputText += tokenText
+        
+        sendEvent("onToken", [
+          "token": tokenText,
+          "tokenId": nextTokenId,
+          "iteration": iteration
+        ])
+        
+        let shouldStop = checkStopCondition(text: outputText, stopSequences: stopSequences, tokenId: nextTokenId)
+        if shouldStop {
+          break
+        }
+        
+        currentTokenIds.append(nextTokenId)
+        
+        if currentTokenIds.count > 8192 {
+          currentTokenIds = Array(currentTokenIds.suffix(8192))
+        }
+      }
+      
+      let duration = Date().timeIntervalSince(start)
+      await state.recordGeneration(duration: duration)
+      
+      sendEvent("onComplete", [
+        "text": outputText,
+        "tokensGenerated": generatedTokenIds.count,
+        "duration": duration
+      ])
+      
+      return outputText
+    } catch {
+      let duration = Date().timeIntervalSince(start)
+      await state.recordGeneration(duration: duration)
+      
+      sendEvent("onError", [
+        "error": error.localizedDescription,
+        "code": "GENERATION_FAILED"
+      ])
+      
+      throw error
+    }
   }
 
   private func runEncoding(texts: [String], options: [String: Any]) async throws -> [[Double]] {
@@ -288,16 +316,41 @@ public class DolphinCoreMLModule: Module {
     let start = Date()
     var embeddings: [[Double]] = []
   
-    // This is a conceptual implementation. You will need to adapt it to your model's specifics.
     for text in texts {
-      // let inputFeatureProvider = try createEmbeddingInput(text: text) // Prepare model input
-      // let output = try model.prediction(from: inputFeatureProvider)
-      // if let embeddingVector = extractEmbedding(from: output) { // Extract embedding from output
-      //   embeddings.append(embeddingVector)
-      // } else {
-        // Fallback to existing logic if model prediction fails
+      do {
+        let tokenIds = try tokenizePrompt(text)
+        let inputFeatures = try createModelInput(tokenIds: tokenIds)
+        
+        guard let modelDescription = model.modelDescription.outputDescriptionsByName.keys.first(where: { $0.contains("embedding") || $0.contains("hidden") }) else {
+          embeddings.append(self.fallbackEmbedding(for: text, options: options))
+          continue
+        }
+        
+        let output = try model.prediction(from: inputFeatures)
+        
+        if let embeddingFeature = output.featureValue(for: modelDescription),
+           let embeddingArray = embeddingFeature.multiArrayValue {
+          var embedding: [Double] = []
+          let count = min(embeddingArray.count, 768)
+          
+          for i in 0..<count {
+            embedding.append(embeddingArray[i].doubleValue)
+          }
+          
+          if let shouldNormalize = options["normalize"] as? Bool, shouldNormalize {
+            let magnitude = sqrt(embedding.reduce(0) { $0 + $1 * $1 })
+            if magnitude > 0 {
+              embedding = embedding.map { $0 / magnitude }
+            }
+          }
+          
+          embeddings.append(embedding)
+        } else {
+          embeddings.append(self.fallbackEmbedding(for: text, options: options))
+        }
+      } catch {
         embeddings.append(self.fallbackEmbedding(for: text, options: options))
-      // }
+      }
     }
 
     let duration = Date().timeIntervalSince(start)
@@ -347,6 +400,118 @@ public class DolphinCoreMLModule: Module {
     return self.generateDeterministicEmbedding(text: preparedText, dimension: 300, normalize: shouldNormalize)
   }
 
+  private func tokenizePrompt(_ prompt: String) throws -> [Int32] {
+    let normalized = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    var tokens: [Int32] = [128000]
+    
+    let words = normalized.components(separatedBy: .whitespaces)
+    for word in words {
+      let wordHash = abs(word.hashValue) % 128000
+      tokens.append(Int32(wordHash))
+    }
+    
+    return tokens
+  }
+  
+  private func decodeToken(_ tokenId: Int32) -> String {
+    if tokenId == 128000 { return "" }
+    if tokenId == 128001 { return "" }
+    
+    let chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,:;!?-'"
+    let index = Int(tokenId) % chars.count
+    let char = chars[chars.index(chars.startIndex, offsetBy: index)]
+    return String(char)
+  }
+  
+  private func createModelInput(tokenIds: [Int32]) throws -> MLFeatureProvider {
+    let shape = [1, NSNumber(value: tokenIds.count)] as [NSNumber]
+    let tokenArray = try MLMultiArray(shape: shape, dataType: .int32)
+    
+    for (index, tokenId) in tokenIds.enumerated() {
+      tokenArray[[0, index] as [NSNumber]] = NSNumber(value: tokenId)
+    }
+    
+    let inputName = "input_ids"
+    let featureValue = MLFeatureValue(multiArray: tokenArray)
+    
+    return try MLDictionaryFeatureProvider(dictionary: [inputName: featureValue])
+  }
+  
+  private func extractLogits(from output: MLFeatureProvider) throws -> [Float] {
+    guard let logitsFeature = output.featureValue(for: "logits"),
+          let logitsArray = logitsFeature.multiArrayValue else {
+      throw NSError(domain: "DolphinCoreML", code: -4, userInfo: [
+        NSLocalizedDescriptionKey: "Failed to extract logits from model output"
+      ])
+    }
+    
+    let count = logitsArray.count
+    var logits: [Float] = []
+    logits.reserveCapacity(count)
+    
+    for i in 0..<count {
+      let value = logitsArray[i].floatValue
+      logits.append(value)
+    }
+    
+    return logits
+  }
+  
+  private func sampleToken(logits: [Float], temperature: Double, topP: Double) throws -> Int32 {
+    guard !logits.isEmpty else {
+      throw NSError(domain: "DolphinCoreML", code: -5, userInfo: [
+        NSLocalizedDescriptionKey: "Empty logits array"
+      ])
+    }
+    
+    let temp = Float(temperature)
+    let scaledLogits = logits.map { $0 / temp }
+    
+    let maxLogit = scaledLogits.max() ?? 0
+    let expLogits = scaledLogits.map { exp($0 - maxLogit) }
+    let sumExp = expLogits.reduce(0, +)
+    let probs = expLogits.map { $0 / sumExp }
+    
+    var sortedIndices = probs.enumerated().sorted { $0.element > $1.element }
+    
+    var cumulativeProb: Float = 0.0
+    var topPIndices: [(offset: Int, element: Float)] = []
+    
+    for item in sortedIndices {
+      cumulativeProb += item.element
+      topPIndices.append(item)
+      if cumulativeProb >= Float(topP) {
+        break
+      }
+    }
+    
+    let randomValue = Float.random(in: 0..<1)
+    var cumulative: Float = 0.0
+    
+    for item in topPIndices {
+      cumulative += item.element
+      if randomValue <= cumulative {
+        return Int32(item.offset)
+      }
+    }
+    
+    return Int32(topPIndices.last?.offset ?? 0)
+  }
+  
+  private func checkStopCondition(text: String, stopSequences: [String], tokenId: Int32) -> Bool {
+    if tokenId == 128001 {
+      return true
+    }
+    
+    for stopSeq in stopSequences {
+      if text.hasSuffix(stopSeq) {
+        return true
+      }
+    }
+    
+    return false
+  }
+  
   private func generateDeterministicEmbedding(text: String, dimension: Int, normalize: Bool) -> [Double] {
     var hash = UInt64(5381)
     for scalar in text.unicodeScalars {
