@@ -2,7 +2,13 @@ const { withDangerousMod } = require("@expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
-const REQUIRE_LINE = "require 'cocoapods-spm'";
+const REQUIRE_BLOCK = [
+  "begin",
+  "  require 'cocoapods-spm'",
+  "rescue LoadError",
+  "  Pod::UI.warn('[withMLXPods] cocoapods-spm gem not available, skipping MLX SPM integration')",
+  "end",
+].join("\n");
 const PLUGIN_LINE = "plugin 'cocoapods-spm'";
 const SPM_LINES = [
   'spm_pkg "mlx-swift", :url => "https://github.com/ml-explore/mlx-swift", :branch => "main"',
@@ -11,29 +17,26 @@ const SPM_LINES = [
 
 const ensureMLXPods = (podfile) => {
   const hasAllSpmLines = SPM_LINES.every((line) => podfile.includes(line));
-  if (
-    podfile.includes(REQUIRE_LINE) &&
-    podfile.includes(PLUGIN_LINE) &&
-    hasAllSpmLines
-  ) {
+  const hasRequireBlock = podfile.includes("require 'cocoapods-spm'");
+  if (hasRequireBlock && podfile.includes(PLUGIN_LINE) && hasAllSpmLines) {
     return podfile;
   }
 
   let updatedPodfile = podfile;
-  if (!updatedPodfile.includes(REQUIRE_LINE)) {
-    updatedPodfile = `${REQUIRE_LINE}\n${updatedPodfile}`;
+  if (!updatedPodfile.includes("require 'cocoapods-spm'")) {
+    updatedPodfile = `${REQUIRE_BLOCK}\n${updatedPodfile}`;
   }
   if (!updatedPodfile.includes(PLUGIN_LINE)) {
-    const requireIndex = updatedPodfile.indexOf(REQUIRE_LINE);
+    const requireIndex = updatedPodfile.indexOf("require 'cocoapods-spm'");
     if (requireIndex !== -1) {
-      const insertAt = requireIndex + REQUIRE_LINE.length;
-      updatedPodfile = `${updatedPodfile.slice(0, insertAt)}\n${PLUGIN_LINE}${updatedPodfile.slice(insertAt)}`;
+      const insertAt = updatedPodfile.indexOf("\n", requireIndex);
+      updatedPodfile = `${updatedPodfile.slice(0, insertAt + 1)}${PLUGIN_LINE}\n${updatedPodfile.slice(insertAt + 1)}`;
     } else {
       updatedPodfile = `${PLUGIN_LINE}\n${updatedPodfile}`;
     }
   }
 
-  const podsBlock = SPM_LINES.join("\n");
+  const podsBlock = `if defined?(spm_pkg)\n${SPM_LINES.join("\n")}\nend`;
   if (podfile.includes("use_expo_modules!")) {
     return updatedPodfile.replace(
       "use_expo_modules!",
