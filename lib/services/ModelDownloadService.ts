@@ -82,6 +82,8 @@ export class ModelDownloadService {
       repoId,
     );
 
+    let tempDir = "";
+
     try {
       const repoFiles = await listRepoFiles({
         repo: repoId,
@@ -277,6 +279,8 @@ export class ModelDownloadService {
     console.log(`[ModelDownloadService] Format: ${modelFormat}`);
     console.log(`[ModelDownloadService] Size: ${this.formatBytes(model.size)}`);
 
+    let tempDir = "";
+
     try {
       await this.ensureModelDirectory();
 
@@ -324,7 +328,7 @@ export class ModelDownloadService {
       }
 
       const modelPath = this.getModelPath(model.id, modelFormat);
-      const tempDir = `${this.getModelDirectory()}temp_${model.id}/`;
+      tempDir = `${this.getModelDirectory()}temp_${model.id}/`;
 
       await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
 
@@ -446,6 +450,9 @@ export class ModelDownloadService {
       }
     } catch (error) {
       console.error("[ModelDownloadService] Download failed:", error);
+      if (tempDir) {
+        await FileSystem.deleteAsync(tempDir, { idempotent: true });
+      }
       return false;
     }
   }
