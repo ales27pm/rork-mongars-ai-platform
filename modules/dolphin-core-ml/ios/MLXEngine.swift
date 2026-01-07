@@ -195,9 +195,7 @@ public actor MLXEngine {
     let userInput = UserInput(prompt: prompt)
     let lmInput = try await context.processor.prepare(input: userInput)
 
-    if generationCache.isEmpty {
-      generationCache = context.model.newCache(parameters: parameters)
-    }
+    generationCache = context.model.newCache(parameters: parameters)
 
     let result = try MLXLMCommon.generate(
       input: lmInput,
