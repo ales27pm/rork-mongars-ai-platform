@@ -83,6 +83,7 @@ const embedding = await dolphinCoreML.encode("Your text here");
 - **CoreML** downloads use `.mlpackage` artifacts and load through the DolphinCoreML module.
 - **MLX** downloads store model assets under a `.mlx` directory and require iOS 18+ devices.
 - The **Local Models** UI displays the format badge so operators can verify which runtime is expected.
+- **MLX pods** are injected during prebuild via `plugins/withMLXPods.js` so CocoaPods installs MLX Swift dependencies alongside Expo modules.
 
 #### 2. **useLLM2Vec Hook** (`lib/hooks/useLLM2Vec.ts`)
 

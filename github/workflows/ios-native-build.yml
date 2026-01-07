@@ -131,7 +131,7 @@ jobs:
         run: |
           echo "🔍 Verifying native module integration"
           if [ -f "ios/Podfile.lock" ]; then
-            grep -E "DolphinCoreML|ExpoModulesCore" ios/Podfile.lock || true
+            grep -E "DolphinCoreML|ExpoModulesCore|MLX" ios/Podfile.lock || true
           else
             echo "⚠️ Podfile.lock not found"
           fi
