@@ -134,7 +134,17 @@ jobs:
       - name: "🗂️ Prepare artifacts"
         run: |
           mkdir -p artifacts/ios
-          eas build:download --platform ios --latest --output artifacts/ios/build.ipa
+          BUILD_ID=$(eas build:list --platform ios --limit 1 --json | jq -r '.[0].id')
+          if [ -z "$BUILD_ID" ] || [ "$BUILD_ID" = "null" ]; then
+            echo "❌ Unable to determine latest iOS build ID"
+            exit 1
+          fi
+          ARTIFACT_URL=$(eas build:view "$BUILD_ID" --json | jq -r '.artifacts.buildUrl')
+          if [ -z "$ARTIFACT_URL" ] || [ "$ARTIFACT_URL" = "null" ]; then
+            echo "❌ Unable to resolve artifact URL for build $BUILD_ID"
+            exit 1
+          fi
+          curl -L "$ARTIFACT_URL" -o artifacts/ios/build.ipa
 
       - name: "📤 Upload iOS build artifacts"
         uses: actions/upload-artifact@v4
