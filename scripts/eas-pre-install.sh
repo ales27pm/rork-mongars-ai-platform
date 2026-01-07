@@ -24,6 +24,6 @@ install_gem() {
 }
 
 install_gem "cocoapods" "~> 1.15"
-install_gem "cocoapods-spm" "~> 0.4"
+install_gem "cocoapods-spm" "~> 0.1"
 
 echo "✅ cocoapods and cocoapods-spm ready for iOS build"
