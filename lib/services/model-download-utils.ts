@@ -123,6 +123,13 @@ const hasMLXStructure = async (
   }
 
   for (const weightFile of weightFiles) {
+    const candidateRelative = weightFile.startsWith("/")
+      ? weightFile.slice(1)
+      : weightFile;
+    if (await pathExists(`${rootPath}/${candidateRelative}`)) {
+      return true;
+    }
+
     const filename = weightFile.split("/").pop();
     if (filename && (await pathExists(`${rootPath}/${filename}`))) {
       return true;
