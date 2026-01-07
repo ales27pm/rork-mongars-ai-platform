@@ -118,25 +118,13 @@ const hasMLXStructure = async (
     return false;
   }
 
-  if (weightFiles.length > 0) {
-    for (const weightFile of weightFiles) {
-      const filename = weightFile.split("/").pop();
-      if (filename && (await pathExists(`${rootPath}/${filename}`))) {
-        return true;
-      }
-    }
+  if (weightFiles.length === 0) {
     return false;
   }
 
-  const defaultWeights = [
-    "model.safetensors",
-    "model.safetensors.index.json",
-    "weights.safetensors",
-    "weights.safetensors.index.json",
-  ];
-
-  for (const filename of defaultWeights) {
-    if (await pathExists(`${rootPath}/${filename}`)) {
+  for (const weightFile of weightFiles) {
+    const filename = weightFile.split("/").pop();
+    if (filename && (await pathExists(`${rootPath}/${filename}`))) {
       return true;
     }
   }
