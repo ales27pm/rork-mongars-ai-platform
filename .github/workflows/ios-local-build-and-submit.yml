@@ -1,0 +1,49 @@
+name: iOS Build and Submit (Local)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-and-submit:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      EAS_ACCESS_TOKEN: ${{ secrets.EAS_TOKEN }}
+      EXPO_TOKEN: ${{ secrets.EAS_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.0
+
+      - name: Install system dependencies
+        run: |
+          brew install cocoapods
+          gem install cocoapods-spm --no-document
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Set up EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Run EAS Build (Local)
+        run: |
+          mkdir -p artifacts/ios
+          eas build --platform ios --local --profile production --non-interactive --output artifacts/ios/build.ipa
+
+      - name: Submit to App Store
+        run: |
+          eas submit --platform ios --profile production --path artifacts/ios/build.ipa --non-interactive

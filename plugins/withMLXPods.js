@@ -1,6 +1,4 @@
-const { withDangerousMod } = require("@expo/config-plugins");
-const fs = require("fs");
-const path = require("path");
+const { withPodfile } = require("@expo/config-plugins");
 
 const REQUIRE_BLOCK = [
   "begin",
@@ -10,9 +8,11 @@ const REQUIRE_BLOCK = [
   "  Pod::UI.warn('[withMLXPods] cocoapods-spm gem not available, skipping MLX SPM integration')",
   "end",
 ].join("\n");
+const PLUGIN_LINE = "plugin 'cocoapods-spm'";
 const SPM_LINES = [
-  'spm_pkg "mlx-swift", :url => "https://github.com/ml-explore/mlx-swift", :branch => "main"',
-  'spm_pkg "mlx-swift-examples", :url => "https://github.com/ml-explore/mlx-swift-examples", :branch => "main"',
+  'spm_pkg "mlx-swift", :git => "https://github.com/ml-explore/mlx-swift", :commit => "072b684acaae80b6a463abab3a103732f33774bf"',
+  'spm_pkg "mlx-swift-examples", :git => "https://github.com/ml-explore/mlx-swift-examples", :commit => "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631"',
+  'spm_pkg "swift-transformers", :git => "https://github.com/huggingface/swift-transformers", :version => "1.0.0"',
 ];
 
 const ensureMLXPods = (podfile) => {
@@ -61,30 +61,19 @@ const ensureMLXPods = (podfile) => {
 };
 
 const withMLXPods = (config) => {
-  return withDangerousMod(config, [
-    "ios",
-    async (config) => {
-      const iosRoot = path.join(config.modRequest.projectRoot, "ios");
-      const podfilePath = path.join(iosRoot, "Podfile");
+  return withPodfile(config, (config) => {
+    const podfile = config.modResults.contents;
+    const updated = ensureMLXPods(podfile);
 
-      if (!fs.existsSync(podfilePath)) {
-        console.warn("[withMLXPods] Podfile not found, skipping MLX pods.");
-        return config;
-      }
+    if (updated !== podfile) {
+      config.modResults.contents = updated;
+      console.log("[withMLXPods] Added MLX pods to Podfile");
+    } else {
+      console.log("[withMLXPods] MLX pods already present");
+    }
 
-      const podfile = fs.readFileSync(podfilePath, "utf8");
-      const updated = ensureMLXPods(podfile);
-
-      if (updated !== podfile) {
-        fs.writeFileSync(podfilePath, updated);
-        console.log("[withMLXPods] Added MLX pods to Podfile");
-      } else {
-        console.log("[withMLXPods] MLX pods already present");
-      }
-
-      return config;
-    },
-  ]);
+    return config;
+  });
 };
 
 module.exports = withMLXPods;
