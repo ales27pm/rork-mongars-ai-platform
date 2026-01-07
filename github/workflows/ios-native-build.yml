@@ -230,21 +230,22 @@ jobs:
         run: |
           BUILD_ID=$(cat build-output.json | jq -r '.id')
           echo "📥 Downloading IPA from EAS"
-          eas build:download --id $BUILD_ID --output ./build.ipa
+          mkdir -p artifacts/ios
+          eas build:download --id $BUILD_ID --output artifacts/ios/build.ipa
 
           echo "📊 IPA size:"
-          ls -lh build.ipa
+          ls -lh artifacts/ios/build.ipa
 
       - name: Verify IPA Contents
         run: |
           echo "🔍 Verifying IPA contents"
-          unzip -l build.ipa | grep -E "(DolphinCoreML|MLX|\.swift)" || echo "⚠️ Native modules may not be included"
+          unzip -l artifacts/ios/build.ipa | grep -E "(DolphinCoreML|MLX|\.swift)" || echo "⚠️ Native modules may not be included"
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-app-${{ github.sha }}
-          path: build.ipa
+          path: artifacts/ios/build.ipa
           retention-days: 30
 
       - name: Upload Build Logs
