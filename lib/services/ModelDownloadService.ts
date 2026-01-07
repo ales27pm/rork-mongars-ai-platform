@@ -11,7 +11,7 @@ import {
   ModelDownloadFormat,
   resolveModelRoot,
 } from "@/lib/services/model-download-utils";
-import { hfUrl, listRepoFiles } from "@huggingface/hub";
+import { hfUrl, listRepoFiles } from "@/lib/services/huggingface-client";
 
 export class ModelDownloadService {
   private static instance: ModelDownloadService;
@@ -167,7 +167,6 @@ export class ModelDownloadService {
         repo: repoId,
         path: filePath,
         revision: "main",
-        repoType: "model",
       });
       const headers: Record<string, string> = {};
       if (token) {
@@ -204,7 +203,6 @@ export class ModelDownloadService {
         repo: repoId,
         path: filePath,
         revision: "main",
-        repoType: "model",
       });
       console.log("[ModelDownloadService] Downloading file:");
       console.log(`  URL: ${url}`);
