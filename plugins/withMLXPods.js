@@ -1,6 +1,4 @@
-const { withDangerousMod } = require("@expo/config-plugins");
-const fs = require("fs");
-const path = require("path");
+const { withPodfile } = require("@expo/config-plugins");
 
 const REQUIRE_BLOCK = [
   "begin",
@@ -62,30 +60,19 @@ const ensureMLXPods = (podfile) => {
 };
 
 const withMLXPods = (config) => {
-  return withDangerousMod(config, [
-    "ios",
-    async (config) => {
-      const iosRoot = path.join(config.modRequest.projectRoot, "ios");
-      const podfilePath = path.join(iosRoot, "Podfile");
+  return withPodfile(config, (config) => {
+    const podfile = config.modResults.contents;
+    const updated = ensureMLXPods(podfile);
 
-      if (!fs.existsSync(podfilePath)) {
-        console.warn("[withMLXPods] Podfile not found, skipping MLX pods.");
-        return config;
-      }
+    if (updated !== podfile) {
+      config.modResults.contents = updated;
+      console.log("[withMLXPods] Added MLX pods to Podfile");
+    } else {
+      console.log("[withMLXPods] MLX pods already present");
+    }
 
-      const podfile = fs.readFileSync(podfilePath, "utf8");
-      const updated = ensureMLXPods(podfile);
-
-      if (updated !== podfile) {
-        fs.writeFileSync(podfilePath, updated);
-        console.log("[withMLXPods] Added MLX pods to Podfile");
-      } else {
-        console.log("[withMLXPods] MLX pods already present");
-      }
-
-      return config;
-    },
-  ]);
+    return config;
+  });
 };
 
 module.exports = withMLXPods;

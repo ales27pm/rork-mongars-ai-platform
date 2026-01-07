@@ -1,0 +1,8 @@
+{
+  "name": "dolphin-core-ml",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "expo-modules-core": "*"
+  }
+}
