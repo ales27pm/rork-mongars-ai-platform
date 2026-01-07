@@ -3,6 +3,10 @@ name: iOS Native Build & Submit
 on:
   workflow_dispatch:
     inputs:
+      target_branch:
+        description: "Branch to run this workflow on"
+        required: true
+        default: "main"
       build_type:
         description: "Build type"
         required: true
@@ -20,6 +24,7 @@ on:
 jobs:
   build:
     name: Build iOS App with Native Modules
+    if: github.ref_name == inputs.target_branch
     runs-on: macos-14
     timeout-minutes: 120
 

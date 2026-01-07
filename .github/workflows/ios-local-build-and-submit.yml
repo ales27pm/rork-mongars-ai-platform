@@ -1,13 +1,16 @@
 name: iOS Build and Submit (Local)
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: "Branch to run this workflow on"
+        required: true
+        default: "main"
 
 jobs:
   build-and-submit:
+    if: github.ref_name == inputs.target_branch
     runs-on: macos-latest
     timeout-minutes: 60
     env:
