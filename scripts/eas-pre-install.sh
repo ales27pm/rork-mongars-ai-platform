@@ -17,9 +17,9 @@ install_gem() {
 
   echo "⬇️ Installing $gem_name ($gem_version)"
   if sudo -n true 2>/dev/null; then
-    sudo gem install "$gem_name" -v "$gem_version"
+    sudo gem install "$gem_name" -v "$gem_version" --no-document --source https://rubygems.org
   else
-    gem install "$gem_name" -v "$gem_version"
+    gem install "$gem_name" -v "$gem_version" --no-document --source https://rubygems.org
   fi
 }
 
