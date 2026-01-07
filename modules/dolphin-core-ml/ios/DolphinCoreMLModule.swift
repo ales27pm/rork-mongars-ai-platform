@@ -150,10 +150,14 @@ public class DolphinCoreMLModule: Module {
 
   private var mlxEngineStore: Any?
   private var mlxEngineConfigStore: Any?
+  private let mlxEngineLock = NSLock()
 
   @available(iOS 18.0, *)
   private var mlxEngine: MLXEngine {
     get {
+      mlxEngineLock.lock()
+      defer { mlxEngineLock.unlock() }
+
       if let engine = mlxEngineStore as? MLXEngine {
         return engine
       }
@@ -163,6 +167,8 @@ public class DolphinCoreMLModule: Module {
       return engine
     }
     set {
+      mlxEngineLock.lock()
+      defer { mlxEngineLock.unlock() }
       mlxEngineStore = newValue
     }
   }
@@ -170,6 +176,9 @@ public class DolphinCoreMLModule: Module {
   @available(iOS 18.0, *)
   private var mlxEngineConfig: MLXEngine.Configuration {
     get {
+      mlxEngineLock.lock()
+      defer { mlxEngineLock.unlock() }
+
       if let config = mlxEngineConfigStore as? MLXEngine.Configuration {
         return config
       }
@@ -179,6 +188,8 @@ public class DolphinCoreMLModule: Module {
       return config
     }
     set {
+      mlxEngineLock.lock()
+      defer { mlxEngineLock.unlock() }
       mlxEngineConfigStore = newValue
     }
   }
