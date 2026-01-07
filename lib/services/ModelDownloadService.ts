@@ -333,7 +333,8 @@ export class ModelDownloadService {
       await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
 
       const startTime = Date.now();
-      const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+      const resolvedTotalSize = files.reduce((sum, f) => sum + f.size, 0);
+      const totalSize = resolvedTotalSize > 0 ? resolvedTotalSize : model.size;
       let totalBytesDownloaded = 0;
       const fileBytesStart = new Map<string, number>();
 
