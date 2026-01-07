@@ -65,6 +65,7 @@ jobs:
           brew install cmake
           brew install swift
           brew install cocoapods
+          sudo gem install cocoapods-spm
 
       - name: Setup EAS
         uses: expo/expo-github-action@v8
@@ -131,9 +132,14 @@ jobs:
         run: |
           echo "🔍 Verifying native module integration"
           if [ -f "ios/Podfile.lock" ]; then
-            grep -E "DolphinCoreML|ExpoModulesCore|MLX" ios/Podfile.lock || true
+            grep -E "DolphinCoreML|ExpoModulesCore|mlx-swift|MLX" ios/Podfile.lock || true
           else
             echo "⚠️ Podfile.lock not found"
+          fi
+          if [ -f "ios/Podfile" ]; then
+            grep -E "spm_pkg \"mlx-swift\"|spm_pkg \"mlx-swift-examples\"" ios/Podfile || true
+          else
+            echo "⚠️ Podfile not found"
           fi
           echo "✅ Native module integration check complete"
 

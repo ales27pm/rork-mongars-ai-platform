@@ -2,33 +2,39 @@ const { withDangerousMod } = require("@expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
-const POD_LINES = [
-  "  pod 'MLX', :git => 'https://github.com/ml-explore/mlx-swift', :branch => 'main'",
-  "  pod 'MLXLLM', :git => 'https://github.com/ml-explore/mlx-swift-examples', :branch => 'main'",
-  "  pod 'MLXLMCommon', :git => 'https://github.com/ml-explore/mlx-swift-examples', :branch => 'main'",
+const PLUGIN_LINE = "plugin 'cocoapods-spm'";
+const SPM_LINES = [
+  'spm_pkg "mlx-swift", :url => "https://github.com/ml-explore/mlx-swift", :branch => "main"',
+  'spm_pkg "mlx-swift-examples", :url => "https://github.com/ml-explore/mlx-swift-examples", :branch => "main"',
 ];
 
 const ensureMLXPods = (podfile) => {
-  if (POD_LINES.some((line) => podfile.includes(line))) {
+  const hasAllSpmLines = SPM_LINES.every((line) => podfile.includes(line));
+  if (podfile.includes(PLUGIN_LINE) && hasAllSpmLines) {
     return podfile;
   }
 
-  const podsBlock = POD_LINES.join("\n");
+  let updatedPodfile = podfile;
+  if (!updatedPodfile.includes(PLUGIN_LINE)) {
+    updatedPodfile = `${PLUGIN_LINE}\n${updatedPodfile}`;
+  }
+
+  const podsBlock = SPM_LINES.join("\n");
   if (podfile.includes("use_expo_modules!")) {
-    return podfile.replace(
+    return updatedPodfile.replace(
       "use_expo_modules!",
       `use_expo_modules!\n${podsBlock}`,
     );
   }
 
   if (podfile.includes("use_react_native!")) {
-    return podfile.replace(
+    return updatedPodfile.replace(
       "use_react_native!",
       `use_react_native!\n${podsBlock}`,
     );
   }
 
-  return podfile.replace(/target ['"].+?['"] do/, (match) => {
+  return updatedPodfile.replace(/target ['"].+?['"] do/, (match) => {
     return `${match}\n${podsBlock}`;
   });
 };
