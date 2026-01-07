@@ -11,6 +11,7 @@ import {
   ModelDownloadFormat,
   resolveModelRoot,
 } from "@/lib/services/model-download-utils";
+import { hfUrl, listRepoFiles } from "@huggingface/hub";
 
 export class ModelDownloadService {
   private static instance: ModelDownloadService;
@@ -82,319 +83,112 @@ export class ModelDownloadService {
     );
 
     try {
-      const apiUrl = `https://huggingface.co/api/models/${repoId}/tree/main`;
-      console.log("[ModelDownloadService] Fetching from HF API:", apiUrl);
-
-      const headers: Record<string, string> = {
-        Accept: "application/json",
-      };
-
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      const response = await fetch(apiUrl, {
-        method: "GET",
-        headers,
-        signal: AbortSignal.timeout(30000),
+      const repoFiles = await listRepoFiles({
+        repo: repoId,
+        revision: "main",
+        accessToken: token,
       });
 
-      if (!response.ok) {
-        console.log(
-          "[ModelDownloadService] API response:",
-          response.status,
-          response.statusText,
-        );
-        const text = await response.text();
-        console.log(
-          "[ModelDownloadService] Response body:",
-          text.substring(0, 500),
-        );
-        return this.fetchHuggingFaceRepoFilesAlternative(repoId, format);
+      const files = repoFiles
+        .filter((path) =>
+          format === "mlx" ? this.isMLXFile(path) : this.isCoreMLFile(path),
+        )
+        .map((path) => ({ path }));
+
+      if (files.length === 0) {
+        throw new Error(`No ${format} files found in ${repoId}.`);
       }
 
-      const data = await response.json();
-      console.log(
-        "[ModelDownloadService] Received file tree with",
-        data.length,
-        "items",
-      );
-
-      const allFiles = data.filter((item: any) => item.type === "file");
-      console.log("[ModelDownloadService] Total files:", allFiles.length);
-      console.log(
-        "[ModelDownloadService] Sample files:",
-        allFiles.slice(0, 5).map((f: any) => f.path),
-      );
-
-      const selectedFiles = data
-        .filter((item: any) => item.type === "file")
-        .filter((item: any) => {
-          if (format === "mlx") {
-            return (
-              item.path.endsWith(".safetensors") ||
-              item.path.endsWith(".safetensors.index.json") ||
-              item.path.endsWith("config.json") ||
-              item.path.endsWith("tokenizer.json") ||
-              item.path.endsWith("tokenizer.model") ||
-              item.path.endsWith("tokenizer_config.json") ||
-              item.path.endsWith("generation_config.json") ||
-              item.path.endsWith("special_tokens_map.json") ||
-              item.path.endsWith("vocab.json") ||
-              item.path.endsWith("merges.txt")
-            );
-          }
-
-          return (
-            item.path.includes(".mlpackage") ||
-            item.path.endsWith(".mlmodel") ||
-            item.path.endsWith(".bin") ||
-            item.path.endsWith("Manifest.json") ||
-            item.path.endsWith("weights.bin") ||
-            item.path.includes("coreml")
+      const sizedFiles = await Promise.all(
+        files.map(async (file) => {
+          const size = await this.fetchHuggingFaceFileSize(
+            repoId,
+            file.path,
+            token,
           );
-        })
-        .map((item: any) => ({
-          path: item.path,
-          size: item.lfs?.size || item.size || 0,
-          lfs: item.lfs
-            ? {
-                oid: item.lfs.oid,
-                size: item.lfs.size,
-                pointerSize: item.lfs.pointerSize,
-              }
-            : undefined,
-        }));
-
-      if (selectedFiles.length > 0) {
-        console.log(
-          "[ModelDownloadService] Found",
-          selectedFiles.length,
-          format === "mlx" ? "MLX files" : "CoreML files",
-        );
-        selectedFiles.forEach((f: HuggingFaceFile) =>
-          console.log(`  - ${f.path} (${this.formatBytes(f.size)})`),
-        );
-        return selectedFiles;
-      }
+          return { ...file, size };
+        }),
+      );
 
       console.log(
-        `[ModelDownloadService] No ${format} files found in API response, using fallback`,
+        "[ModelDownloadService] Found",
+        sizedFiles.length,
+        format === "mlx" ? "MLX files" : "CoreML files",
       );
-      return this.fetchHuggingFaceRepoFilesAlternative(repoId, format);
+      sizedFiles.forEach((file) =>
+        console.log(`  - ${file.path} (${this.formatBytes(file.size)})`),
+      );
+
+      return sizedFiles;
     } catch (error) {
-      console.error("[ModelDownloadService] API fetch error:", error);
+      console.error("[ModelDownloadService] Hugging Face fetch error:", error);
       if (error instanceof Error) {
         console.error("[ModelDownloadService] Error details:", error.message);
       }
-      return this.fetchHuggingFaceRepoFilesAlternative(repoId, format);
+      throw error;
     }
   }
 
-  private async fetchHuggingFaceRepoFilesAlternative(
+  private isMLXFile(path: string): boolean {
+    return (
+      path.endsWith(".safetensors") ||
+      path.endsWith(".safetensors.index.json") ||
+      path.endsWith("config.json") ||
+      path.endsWith("tokenizer.json") ||
+      path.endsWith("tokenizer.model") ||
+      path.endsWith("tokenizer_config.json") ||
+      path.endsWith("generation_config.json") ||
+      path.endsWith("special_tokens_map.json") ||
+      path.endsWith("vocab.json") ||
+      path.endsWith("merges.txt")
+    );
+  }
+
+  private isCoreMLFile(path: string): boolean {
+    return (
+      path.includes(".mlpackage") ||
+      path.endsWith(".mlmodel") ||
+      path.endsWith(".bin") ||
+      path.endsWith("Manifest.json") ||
+      path.endsWith("weights.bin") ||
+      path.includes("coreml")
+    );
+  }
+
+  private async fetchHuggingFaceFileSize(
     repoId: string,
-    format: ModelDownloadFormat,
-  ): Promise<HuggingFaceFile[]> {
-    console.log(
-      "[ModelDownloadService] Using direct file discovery for:",
-      repoId,
-    );
-
-    if (format === "mlx") {
-      const candidatePrefixes = ["", "mlx/", "model/", "weights/"];
-      const requiredFiles = [
-        "config.json",
-        "tokenizer.json",
-        "tokenizer.model",
-        "tokenizer_config.json",
-        "generation_config.json",
-        "special_tokens_map.json",
-        "vocab.json",
-        "merges.txt",
-      ];
-      const weightFiles = [
-        "model.safetensors",
-        "model.safetensors.index.json",
-        "weights.safetensors",
-        "weights.safetensors.index.json",
-      ];
-
-      for (const prefix of candidatePrefixes) {
-        const configPath = `${prefix}config.json`;
-        const configUrl = `https://huggingface.co/${repoId}/resolve/main/${configPath}`;
-
-        try {
-          const configResponse = await fetch(configUrl, {
-            method: "HEAD",
-            signal: AbortSignal.timeout(10000),
-            redirect: "follow",
-          });
-
-          if (!configResponse.ok) {
-            continue;
-          }
-
-          const filesWithSizes: HuggingFaceFile[] = [];
-
-          for (const filename of requiredFiles) {
-            const filePath = `${prefix}${filename}`;
-            try {
-              const fileUrl = `https://huggingface.co/${repoId}/resolve/main/${filePath}`;
-              const headResponse = await fetch(fileUrl, {
-                method: "HEAD",
-                signal: AbortSignal.timeout(10000),
-                redirect: "follow",
-              });
-              if (headResponse.ok) {
-                const size = headResponse.headers.get("content-length");
-                filesWithSizes.push({
-                  path: filePath,
-                  size: size ? parseInt(size, 10) : 0,
-                });
-              }
-            } catch {
-              continue;
-            }
-          }
-
-          let hasWeights = false;
-          for (const filename of weightFiles) {
-            const filePath = `${prefix}${filename}`;
-            try {
-              const fileUrl = `https://huggingface.co/${repoId}/resolve/main/${filePath}`;
-              const headResponse = await fetch(fileUrl, {
-                method: "HEAD",
-                signal: AbortSignal.timeout(10000),
-                redirect: "follow",
-              });
-              if (headResponse.ok) {
-                const size = headResponse.headers.get("content-length");
-                filesWithSizes.push({
-                  path: filePath,
-                  size: size ? parseInt(size, 10) : 0,
-                });
-                hasWeights = true;
-              }
-            } catch {
-              continue;
-            }
-          }
-
-          if (hasWeights) {
-            const totalSize = filesWithSizes.reduce(
-              (sum, f) => sum + f.size,
-              0,
-            );
-            console.log(
-              `[ModelDownloadService] Total download size: ${this.formatBytes(totalSize)}`,
-            );
-            return filesWithSizes;
-          }
-        } catch (error) {
-          console.log(
-            "[ModelDownloadService] MLX structure test failed:",
-            error instanceof Error ? error.message : "Unknown error",
-          );
-        }
+    filePath: string,
+    token?: string,
+  ): Promise<number> {
+    try {
+      const url = hfUrl({
+        repo: repoId,
+        path: filePath,
+        revision: "main",
+        repoType: "model",
+      });
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
       }
-
-      throw new Error(
-        `Could not find valid MLX model structure for ${repoId}.`,
+      const response = await fetch(url, {
+        method: "HEAD",
+        headers,
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) {
+        return 0;
+      }
+      const size = response.headers.get("content-length");
+      return size ? parseInt(size, 10) : 0;
+    } catch (error) {
+      console.warn(
+        "[ModelDownloadService] Failed to resolve file size:",
+        filePath,
+        error instanceof Error ? error.message : "Unknown error",
       );
+      return 0;
     }
-
-    const possibleStructures = [
-      [
-        "coreml/coreml-model.mlpackage/Manifest.json",
-        "coreml/coreml-model.mlpackage/Data/com.apple.CoreML/model.mlmodel",
-        "coreml/coreml-model.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
-      ],
-      [
-        "model.mlpackage/Manifest.json",
-        "model.mlpackage/Data/com.apple.CoreML/model.mlmodel",
-        "model.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
-      ],
-      [
-        "Manifest.json",
-        "Data/com.apple.CoreML/model.mlmodel",
-        "Data/com.apple.CoreML/weights/weight.bin",
-      ],
-      [
-        "coreml/Manifest.json",
-        "coreml/Data/com.apple.CoreML/model.mlmodel",
-        "coreml/Data/com.apple.CoreML/weights/weight.bin",
-      ],
-    ];
-
-    for (const structure of possibleStructures) {
-      const testUrl = `https://huggingface.co/${repoId}/resolve/main/${structure[0]}`;
-      console.log("[ModelDownloadService] Testing structure:", structure[0]);
-
-      try {
-        const testResponse = await fetch(testUrl, {
-          method: "HEAD",
-          signal: AbortSignal.timeout(10000),
-          redirect: "follow",
-        });
-
-        console.log(
-          `[ModelDownloadService] Test response: ${testResponse.status} ${testResponse.statusText}`,
-        );
-
-        if (testResponse.ok) {
-          console.log("[ModelDownloadService] ✓ Found valid structure!");
-
-          const filesWithSizes = await Promise.all(
-            structure.map(async (path) => {
-              try {
-                const fileUrl = `https://huggingface.co/${repoId}/resolve/main/${path}`;
-                const headResponse = await fetch(fileUrl, {
-                  method: "HEAD",
-                  signal: AbortSignal.timeout(10000),
-                  redirect: "follow",
-                });
-
-                const size = headResponse.headers.get("content-length");
-                const actualSize = size ? parseInt(size, 10) : 0;
-                console.log(
-                  `[ModelDownloadService]   ${path}: ${this.formatBytes(actualSize)}`,
-                );
-
-                return {
-                  path,
-                  size: actualSize,
-                };
-              } catch {
-                console.log(
-                  `[ModelDownloadService]   ${path}: Failed to fetch size`,
-                );
-                return {
-                  path,
-                  size: 1024 * 1024,
-                };
-              }
-            }),
-          );
-
-          const totalSize = filesWithSizes.reduce((sum, f) => sum + f.size, 0);
-          console.log(
-            `[ModelDownloadService] Total download size: ${this.formatBytes(totalSize)}`,
-          );
-
-          return filesWithSizes;
-        }
-      } catch (error) {
-        console.log(
-          "[ModelDownloadService] Structure test failed:",
-          error instanceof Error ? error.message : "Unknown error",
-        );
-        continue;
-      }
-    }
-
-    throw new Error(
-      `Could not find valid model structure for ${repoId}. Please verify the repository contains a CoreML model.`,
-    );
   }
 
   private async downloadHuggingFaceFile(
@@ -404,7 +198,12 @@ export class ModelDownloadService {
     onProgress?: (bytes: number) => void,
   ): Promise<boolean> {
     try {
-      const url = `https://huggingface.co/${repoId}/resolve/main/${filePath}`;
+      const url = hfUrl({
+        repo: repoId,
+        path: filePath,
+        revision: "main",
+        repoType: "model",
+      });
       console.log("[ModelDownloadService] Downloading file:");
       console.log(`  URL: ${url}`);
       console.log(`  Destination: ${localPath}`);
