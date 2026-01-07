@@ -5,11 +5,11 @@ const path = require("path");
 const REQUIRE_BLOCK = [
   "begin",
   "  require 'cocoapods-spm'",
+  "  plugin 'cocoapods-spm'",
   "rescue LoadError",
   "  Pod::UI.warn('[withMLXPods] cocoapods-spm gem not available, skipping MLX SPM integration')",
   "end",
 ].join("\n");
-const PLUGIN_LINE = "plugin 'cocoapods-spm'";
 const SPM_LINES = [
   'spm_pkg "mlx-swift", :url => "https://github.com/ml-explore/mlx-swift", :branch => "main"',
   'spm_pkg "mlx-swift-examples", :url => "https://github.com/ml-explore/mlx-swift-examples", :branch => "main"',
