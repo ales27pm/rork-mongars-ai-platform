@@ -131,7 +131,7 @@ jobs:
           bundle exec pod install --repo-update
           cd ..
 
-          echo "✅ iOS dependencies ready"
+          grep -E "DolphinCoreML|ExpoModulesCore" ios/Podfile.lock
 
       - name: Verify Native Module Integration
         run: |
