@@ -2,10 +2,11 @@ name: "🎨 iOS Native Build"
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    inputs:
+      target_branch:
+        description: "Branch to run this workflow on"
+        required: true
+        default: "main"
 
 env:
   NODE_VERSION: "20"
@@ -26,6 +27,7 @@ env:
 jobs:
   build-ios:
     name: "🎨 Build iOS Native Components"
+    if: github.ref_name == inputs.target_branch
     runs-on: macos-latest
 
     steps:

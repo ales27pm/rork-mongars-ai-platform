@@ -1,21 +1,23 @@
 name: 🚀 iOS Production Pipeline
 
 on:
-  push:
-    branches: [main, release/*]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      target_branch:
+        description: "Branch to run this workflow on"
+        required: true
+        default: "main"
 
 env:
-  NODE_VERSION: '20'
-  EXPO_VERSION: 'latest'
+  NODE_VERSION: "20"
+  EXPO_VERSION: "latest"
 
 jobs:
   quality-gate:
     name: 🔍 Quality Gate
+    if: github.ref_name == inputs.target_branch
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -24,7 +26,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: 🔧 Install dependencies
         run: npm ci --legacy-peer-deps
@@ -50,9 +52,10 @@ jobs:
 
   build-analysis:
     name: 📦 Build Analysis
+    if: github.ref_name == inputs.target_branch
     runs-on: ubuntu-latest
     needs: quality-gate
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -61,7 +64,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: 🔧 Install dependencies
         run: npm ci --legacy-peer-deps
@@ -79,8 +82,8 @@ jobs:
     name: 🚀 Deploy
     runs-on: ubuntu-latest
     needs: [quality-gate, build-analysis]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+    if: github.ref_name == inputs.target_branch
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -89,7 +92,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: 🔧 Install dependencies
         run: npm ci --legacy-peer-deps
@@ -119,8 +122,8 @@ jobs:
     name: 📢 Notify
     runs-on: ubuntu-latest
     needs: [deploy]
-    if: always()
-    
+    if: always() && github.ref_name == inputs.target_branch
+
     steps:
       - name: 📢 Workflow Status
         run: |
