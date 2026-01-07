@@ -1,10 +1,31 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch, Alert, Platform } from 'react-native';
-import { Stack } from 'expo-router';
-import { Download, Play, Pause, Trash2, Check, Settings, HardDrive, Cpu, Zap, Shield, Package } from 'lucide-react-native';
-import { useModelManager } from '@/lib/providers/model-manager';
-import { modelDownloadService } from '@/lib/services/ModelDownloadService';
-import { LLMModel } from '@/types/model-manager';
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  Switch,
+  Alert,
+  Platform,
+} from "react-native";
+import { Stack } from "expo-router";
+import {
+  Download,
+  Play,
+  Pause,
+  Trash2,
+  Check,
+  Settings,
+  HardDrive,
+  Cpu,
+  Zap,
+  Shield,
+  Package,
+} from "lucide-react-native";
+import { useModelManager } from "@/lib/providers/model-manager";
+import { modelDownloadService } from "@/lib/services/ModelDownloadService";
+import { LLMModel } from "@/types/model-manager";
 
 export default function ModelsScreen() {
   const {
@@ -25,61 +46,72 @@ export default function ModelsScreen() {
 
   const [showSettings, setShowSettings] = useState(false);
 
-  const handleDownload = async (modelId: string) => {
-    if (!canDownload(modelId)) {
-      Alert.alert('Insufficient Storage', 'Not enough disk space to download this model.');
+  const handleDownload = async (model: LLMModel) => {
+    if (model.format === "mlx" && Platform.OS !== "ios") {
+      Alert.alert(
+        "Unsupported Platform",
+        "MLX downloads require iOS 18+ devices.",
+      );
       return;
     }
 
-    const success = await downloadModel(modelId);
+    if (!canDownload(model.id)) {
+      Alert.alert(
+        "Insufficient Storage",
+        "Not enough disk space to download this model.",
+      );
+      return;
+    }
+
+    const success = await downloadModel(model.id);
     if (success) {
-      Alert.alert('Success', 'Model downloaded successfully!');
+      Alert.alert("Success", "Model downloaded successfully!");
     } else {
-      Alert.alert('Error', 'Failed to download model. Please try again.');
+      Alert.alert("Error", "Failed to download model. Please try again.");
     }
   };
 
   const handleDelete = (model: LLMModel) => {
     Alert.alert(
-      'Delete Model',
+      "Delete Model",
       `Are you sure you want to delete ${model.displayName}? This will free up ${model.sizeFormatted} of storage.`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'Delete',
-          style: 'destructive',
+          text: "Delete",
+          style: "destructive",
           onPress: async () => {
             const success = await deleteModel(model.id);
             if (success) {
-              Alert.alert('Deleted', 'Model deleted successfully.');
+              Alert.alert("Deleted", "Model deleted successfully.");
             }
           },
         },
-      ]
+      ],
     );
   };
 
   const handleLoad = async (modelId: string) => {
     const success = await loadModel(modelId);
     if (success) {
-      Alert.alert('Success', 'Model loaded successfully!');
+      Alert.alert("Success", "Model loaded successfully!");
     } else {
-      Alert.alert('Error', 'Failed to load model. Please try again.');
+      Alert.alert("Error", "Failed to load model. Please try again.");
     }
   };
 
   const handleUnload = async () => {
     await unloadModel();
-    Alert.alert('Unloaded', 'Model unloaded successfully.');
+    Alert.alert("Unloaded", "Model unloaded successfully.");
   };
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Local Models',
-          headerStyle: { backgroundColor: '#0f172a' },
-          headerTintColor: '#fff',
+          title: "Local Models",
+          headerStyle: { backgroundColor: "#0f172a" },
+          headerTintColor: "#fff",
           headerRight: () => (
             <TouchableOpacity onPress={() => setShowSettings(!showSettings)}>
               <Settings size={24} color="#3b82f6" />
@@ -88,7 +120,10 @@ export default function ModelsScreen() {
         }}
       />
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.header}>
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
@@ -108,9 +143,7 @@ export default function ModelsScreen() {
             <View style={styles.statCard}>
               <Zap size={24} color="#f59e0b" />
               <Text style={styles.statLabel}>Loaded</Text>
-              <Text style={styles.statValue}>
-                {loadedModelId ? '1' : '0'}
-              </Text>
+              <Text style={styles.statValue}>{loadedModelId ? "1" : "0"}</Text>
             </View>
           </View>
         </View>
@@ -126,8 +159,10 @@ export default function ModelsScreen() {
               </View>
               <Switch
                 value={settings.enableEncryption}
-                onValueChange={(value) => updateSettings({ enableEncryption: value })}
-                trackColor={{ false: '#334155', true: '#3b82f6' }}
+                onValueChange={(value) =>
+                  updateSettings({ enableEncryption: value })
+                }
+                trackColor={{ false: "#334155", true: "#3b82f6" }}
               />
             </View>
 
@@ -137,7 +172,7 @@ export default function ModelsScreen() {
                 <Text style={styles.settingLabel}>Compute Units</Text>
               </View>
               <View style={styles.segmentedControl}>
-                {(['all', 'cpuAndGPU', 'cpuOnly'] as const).map((unit) => (
+                {(["all", "cpuAndGPU", "cpuOnly"] as const).map((unit) => (
                   <TouchableOpacity
                     key={unit}
                     style={[
@@ -149,10 +184,15 @@ export default function ModelsScreen() {
                     <Text
                       style={[
                         styles.segmentText,
-                        settings.computeUnits === unit && styles.segmentTextActive,
+                        settings.computeUnits === unit &&
+                          styles.segmentTextActive,
                       ]}
                     >
-                      {unit === 'all' ? 'All' : unit === 'cpuAndGPU' ? 'CPU+GPU' : 'CPU'}
+                      {unit === "all"
+                        ? "All"
+                        : unit === "cpuAndGPU"
+                          ? "CPU+GPU"
+                          : "CPU"}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -162,7 +202,9 @@ export default function ModelsScreen() {
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
                 <Text style={styles.settingLabel}>Max Batch Size</Text>
-                <Text style={styles.settingDescription}>Current: {settings.maxBatchSize}</Text>
+                <Text style={styles.settingDescription}>
+                  Current: {settings.maxBatchSize}
+                </Text>
               </View>
               <View style={styles.batchSizeControls}>
                 {[4, 8, 16, 32].map((size) => (
@@ -170,14 +212,16 @@ export default function ModelsScreen() {
                     key={size}
                     style={[
                       styles.batchSizeButton,
-                      settings.maxBatchSize === size && styles.batchSizeButtonActive,
+                      settings.maxBatchSize === size &&
+                        styles.batchSizeButtonActive,
                     ]}
                     onPress={() => updateSettings({ maxBatchSize: size })}
                   >
                     <Text
                       style={[
                         styles.batchSizeText,
-                        settings.maxBatchSize === size && styles.batchSizeTextActive,
+                        settings.maxBatchSize === size &&
+                          styles.batchSizeTextActive,
                       ]}
                     >
                       {size}
@@ -198,7 +242,7 @@ export default function ModelsScreen() {
             isLoaded={loadedModelId === model.id}
             progress={downloadProgress.get(model.id)}
             isLoadingModel={isLoading}
-            onDownload={() => handleDownload(model.id)}
+            onDownload={() => handleDownload(model)}
             onDelete={() => handleDelete(model)}
             onLoad={() => handleLoad(model.id)}
             onUnload={handleUnload}
@@ -235,18 +279,20 @@ function ModelCard({
 }: ModelCardProps) {
   const getQuantizationColor = (quantization: string) => {
     switch (quantization) {
-      case 'int4':
-        return '#10b981';
-      case 'int8':
-        return '#3b82f6';
-      case 'float16':
-        return '#f59e0b';
-      case 'float32':
-        return '#ef4444';
+      case "int4":
+        return "#10b981";
+      case "int8":
+        return "#3b82f6";
+      case "float16":
+        return "#f59e0b";
+      case "float32":
+        return "#ef4444";
       default:
-        return '#64748b';
+        return "#64748b";
     }
   };
+
+  const isMLXUnsupported = model.format === "mlx" && Platform.OS !== "ios";
 
   return (
     <View style={styles.modelCard}>
@@ -269,6 +315,14 @@ function ModelCard({
           <Text style={styles.metaValue}>{model.sizeFormatted}</Text>
         </View>
         <View style={styles.metaItem}>
+          <Text style={styles.metaLabel}>Format</Text>
+          <View style={styles.formatBadge}>
+            <Text style={styles.formatText}>
+              {(model.format ?? "coreml").toUpperCase()}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.metaItem}>
           <Text style={styles.metaLabel}>Parameters</Text>
           <Text style={styles.metaValue}>{model.parameters}</Text>
         </View>
@@ -284,7 +338,9 @@ function ModelCard({
               { backgroundColor: getQuantizationColor(model.quantization) },
             ]}
           >
-            <Text style={styles.quantizationText}>{model.quantization.toUpperCase()}</Text>
+            <Text style={styles.quantizationText}>
+              {model.quantization.toUpperCase()}
+            </Text>
           </View>
         </View>
       </View>
@@ -297,20 +353,32 @@ function ModelCard({
         ))}
       </View>
 
+      {model.format === "mlx" && Platform.OS !== "ios" && (
+        <View style={styles.platformWarning}>
+          <Text style={styles.platformWarningText}>
+            ⚠️ MLX downloads require iOS 18+ devices
+          </Text>
+        </View>
+      )}
+
       {model.isDownloading && progress && (
         <View style={styles.progressContainer}>
           <View style={styles.progressBar}>
             <View
-              style={[styles.progressFill, { width: `${progress.percentage}%` }]}
+              style={[
+                styles.progressFill,
+                { width: `${progress.percentage}%` },
+              ]}
             />
           </View>
           <View style={styles.progressInfo}>
             <Text style={styles.progressText}>
-              {progress.percentage.toFixed(1)}% •{' '}
+              {progress.percentage.toFixed(1)}% •{" "}
               {modelDownloadService.formatSpeed(progress.speed)}
             </Text>
             <Text style={styles.progressText}>
-              ETA: {modelDownloadService.formatTime(progress.estimatedTimeRemaining)}
+              ETA:{" "}
+              {modelDownloadService.formatTime(progress.estimatedTimeRemaining)}
             </Text>
           </View>
         </View>
@@ -318,7 +386,14 @@ function ModelCard({
 
       <View style={styles.modelActions}>
         {!model.isDownloaded && !model.isDownloading && (
-          <TouchableOpacity style={styles.primaryButton} onPress={onDownload}>
+          <TouchableOpacity
+            style={[
+              styles.primaryButton,
+              isMLXUnsupported && styles.disabledButton,
+            ]}
+            onPress={onDownload}
+            disabled={isMLXUnsupported}
+          >
             <Download size={18} color="#fff" />
             <Text style={styles.buttonText}>Download</Text>
           </TouchableOpacity>
@@ -334,13 +409,16 @@ function ModelCard({
         {model.isDownloaded && !isLoaded && (
           <>
             <TouchableOpacity
-              style={[styles.primaryButton, isLoadingModel && styles.disabledButton]}
+              style={[
+                styles.primaryButton,
+                isLoadingModel && styles.disabledButton,
+              ]}
               onPress={onLoad}
               disabled={isLoadingModel}
             >
               <Play size={18} color="#fff" />
               <Text style={styles.buttonText}>
-                {isLoadingModel ? 'Loading...' : 'Load'}
+                {isLoadingModel ? "Loading..." : "Load"}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={onDelete}>
@@ -357,7 +435,7 @@ function ModelCard({
         )}
       </View>
 
-      {Platform.OS === 'web' && (
+      {Platform.OS === "web" && (
         <View style={styles.webWarning}>
           <Text style={styles.webWarningText}>
             ⚠️ Model downloads are only available on iOS/Android
@@ -371,7 +449,7 @@ function ModelCard({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: "#0f172a",
   },
   scrollView: {
     flex: 1,
@@ -384,56 +462,56 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   statsContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#1e293b',
+    backgroundColor: "#1e293b",
     borderRadius: 12,
     padding: 16,
-    alignItems: 'center',
+    alignItems: "center",
     gap: 8,
   },
   statLabel: {
-    color: '#94a3b8',
+    color: "#94a3b8",
     fontSize: 12,
   },
   statValue: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   settingsPanel: {
-    backgroundColor: '#1e293b',
+    backgroundColor: "#1e293b",
     borderRadius: 12,
     padding: 16,
     gap: 16,
   },
   settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     gap: 12,
   },
   settingInfo: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   settingLabel: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   settingDescription: {
-    color: '#94a3b8',
+    color: "#94a3b8",
     fontSize: 12,
   },
   segmentedControl: {
-    flexDirection: 'row',
-    backgroundColor: '#0f172a',
+    flexDirection: "row",
+    backgroundColor: "#0f172a",
     borderRadius: 8,
     padding: 2,
   },
@@ -443,56 +521,56 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   segmentActive: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: "#3b82f6",
   },
   segmentText: {
-    color: '#94a3b8',
+    color: "#94a3b8",
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   segmentTextActive: {
-    color: '#fff',
+    color: "#fff",
   },
   batchSizeControls: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
   },
   batchSizeButton: {
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 6,
-    backgroundColor: '#0f172a',
+    backgroundColor: "#0f172a",
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: "#334155",
   },
   batchSizeButtonActive: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
+    backgroundColor: "#3b82f6",
+    borderColor: "#3b82f6",
   },
   batchSizeText: {
-    color: '#94a3b8',
+    color: "#94a3b8",
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   batchSizeTextActive: {
-    color: '#fff',
+    color: "#fff",
   },
   sectionTitle: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
     marginBottom: 8,
   },
   modelCard: {
-    backgroundColor: '#1e293b',
+    backgroundColor: "#1e293b",
     borderRadius: 12,
     padding: 16,
     gap: 16,
   },
   modelHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     gap: 12,
   },
   modelInfo: {
@@ -500,47 +578,47 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   modelName: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   modelDescription: {
-    color: '#94a3b8',
+    color: "#94a3b8",
     fontSize: 13,
     lineHeight: 18,
   },
   loadedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
-    backgroundColor: '#10b98120',
+    backgroundColor: "#10b98120",
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 6,
   },
   loadedText: {
-    color: '#10b981',
+    color: "#10b981",
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   modelMeta: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
   },
   metaItem: {
     gap: 4,
   },
   metaLabel: {
-    color: '#64748b',
+    color: "#64748b",
     fontSize: 11,
-    textTransform: 'uppercase',
-    fontWeight: '600',
+    textTransform: "uppercase",
+    fontWeight: "600",
   },
   metaValue: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   quantizationBadge: {
     paddingVertical: 2,
@@ -548,89 +626,100 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   quantizationText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
+  },
+  formatBadge: {
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    backgroundColor: "#334155",
+  },
+  formatText: {
+    color: "#e2e8f0",
+    fontSize: 12,
+    fontWeight: "700",
   },
   capabilitiesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   capabilityTag: {
-    backgroundColor: '#334155',
+    backgroundColor: "#334155",
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 6,
   },
   capabilityText: {
-    color: '#94a3b8',
+    color: "#94a3b8",
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   progressContainer: {
     gap: 8,
   },
   progressBar: {
     height: 8,
-    backgroundColor: '#334155',
+    backgroundColor: "#334155",
     borderRadius: 4,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   progressFill: {
-    height: '100%',
-    backgroundColor: '#3b82f6',
+    height: "100%",
+    backgroundColor: "#3b82f6",
     borderRadius: 4,
   },
   progressInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   progressText: {
-    color: '#94a3b8',
+    color: "#94a3b8",
     fontSize: 12,
   },
   modelActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
   },
   primaryButton: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 8,
-    backgroundColor: '#3b82f6',
+    backgroundColor: "#3b82f6",
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
   },
   secondaryButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#334155',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#334155",
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
   },
   dangerButton: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 8,
-    backgroundColor: '#ef4444',
+    backgroundColor: "#ef4444",
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
   },
   warningButton: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 8,
-    backgroundColor: '#f59e0b',
+    backgroundColor: "#f59e0b",
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -639,20 +728,32 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   buttonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   webWarning: {
-    backgroundColor: '#f59e0b20',
+    backgroundColor: "#f59e0b20",
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#f59e0b40',
+    borderColor: "#f59e0b40",
   },
   webWarningText: {
-    color: '#f59e0b',
+    color: "#f59e0b",
     fontSize: 12,
-    textAlign: 'center',
+    textAlign: "center",
+  },
+  platformWarning: {
+    backgroundColor: "#f59e0b20",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#f59e0b40",
+  },
+  platformWarningText: {
+    color: "#f59e0b",
+    fontSize: 12,
+    textAlign: "center",
   },
 });

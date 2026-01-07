@@ -7,6 +7,7 @@
     "start-web": "bunx rork start -p 2agpgihkxtu4agpk7y6uc --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p 2agpgihkxtu4agpk7y6uc --web --tunnel",
     "lint": "expo lint",
+    "test": "jest --runInBand",
     "postinstall": "patch-package"
   },
   "dependencies": {
