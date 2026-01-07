@@ -387,7 +387,16 @@ public class DolphinCoreMLModule: Module {
     let tokenizerId = (tokenizerIdRaw?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? mlxEngineConfig.tokenizerId
 
     let localModelPathRaw = payload["localModelPath"] as? String
-    let localModelPath = (localModelPathRaw?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? mlxEngineConfig.localModelPath
+    let localModelPath = (localModelPathRaw?.trimmingCharacters(in: .whitespacesAndNewlines))
+      .flatMap { $0.isEmpty ? nil : $0 }
+      .map { raw in
+        if let url = URL(string: raw), url.isFileURL {
+          return url.path
+        }
+        return (raw as NSString).expandingTildeInPath
+      }
+      .map { ($0 as NSString).standardizingPath }
+      ?? mlxEngineConfig.localModelPath
 
     return MLXEngine.Configuration(
       vocabSize: vocab,
