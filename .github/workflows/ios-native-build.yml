@@ -134,12 +134,14 @@ jobs:
       - name: "🗂️ Prepare artifacts"
         run: |
           mkdir -p artifacts/ios
-          BUILD_ID=$(eas build:list --platform ios --limit 1 --json | jq -r '.[0].id')
+          BUILD_LIST_JSON=$(eas build:list --platform ios --limit 1 --json --non-interactive --no-color | sed -n '/^\[/,$p')
+          BUILD_ID=$(echo "$BUILD_LIST_JSON" | jq -r '.[0].id')
           if [ -z "$BUILD_ID" ] || [ "$BUILD_ID" = "null" ]; then
             echo "❌ Unable to determine latest iOS build ID"
             exit 1
           fi
-          ARTIFACT_URL=$(eas build:view "$BUILD_ID" --json | jq -r '.artifacts.buildUrl')
+          BUILD_VIEW_JSON=$(eas build:view "$BUILD_ID" --json --non-interactive --no-color | sed -n '/^{/,$p')
+          ARTIFACT_URL=$(echo "$BUILD_VIEW_JSON" | jq -r '.artifacts.buildUrl')
           if [ -z "$ARTIFACT_URL" ] || [ "$ARTIFACT_URL" = "null" ]; then
             echo "❌ Unable to resolve artifact URL for build $BUILD_ID"
             exit 1
