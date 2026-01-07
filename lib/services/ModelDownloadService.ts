@@ -167,7 +167,6 @@ export class ModelDownloadService {
         repo: repoId,
         path: filePath,
         revision: "main",
-        repoType: "model",
       });
       const headers: Record<string, string> = {};
       if (token) {
@@ -204,7 +203,6 @@ export class ModelDownloadService {
         repo: repoId,
         path: filePath,
         revision: "main",
-        repoType: "model",
       });
       console.log("[ModelDownloadService] Downloading file:");
       console.log(`  URL: ${url}`);
