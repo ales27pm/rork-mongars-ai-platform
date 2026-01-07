@@ -65,7 +65,12 @@ jobs:
           brew install cmake
           brew install swift
           brew install cocoapods
-          sudo gem install cocoapods-spm
+          sudo gem install bundler
+
+      - name: Install Ruby Gems
+        run: |
+          echo "💎 Installing Ruby gems"
+          bundle install
 
       - name: Setup EAS
         uses: expo/expo-github-action@v8
@@ -123,7 +128,7 @@ jobs:
 
           echo "📦 Installing CocoaPods dependencies"
           cd ios
-          pod install --repo-update
+          bundle exec pod install --repo-update
           cd ..
 
           echo "✅ iOS dependencies ready"

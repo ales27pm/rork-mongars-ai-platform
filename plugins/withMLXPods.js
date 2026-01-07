@@ -2,6 +2,7 @@ const { withDangerousMod } = require("@expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
+const REQUIRE_LINE = "require 'cocoapods-spm'";
 const PLUGIN_LINE = "plugin 'cocoapods-spm'";
 const SPM_LINES = [
   'spm_pkg "mlx-swift", :url => "https://github.com/ml-explore/mlx-swift", :branch => "main"',
@@ -10,13 +11,26 @@ const SPM_LINES = [
 
 const ensureMLXPods = (podfile) => {
   const hasAllSpmLines = SPM_LINES.every((line) => podfile.includes(line));
-  if (podfile.includes(PLUGIN_LINE) && hasAllSpmLines) {
+  if (
+    podfile.includes(REQUIRE_LINE) &&
+    podfile.includes(PLUGIN_LINE) &&
+    hasAllSpmLines
+  ) {
     return podfile;
   }
 
   let updatedPodfile = podfile;
+  if (!updatedPodfile.includes(REQUIRE_LINE)) {
+    updatedPodfile = `${REQUIRE_LINE}\n${updatedPodfile}`;
+  }
   if (!updatedPodfile.includes(PLUGIN_LINE)) {
-    updatedPodfile = `${PLUGIN_LINE}\n${updatedPodfile}`;
+    const requireIndex = updatedPodfile.indexOf(REQUIRE_LINE);
+    if (requireIndex !== -1) {
+      const insertAt = requireIndex + REQUIRE_LINE.length;
+      updatedPodfile = `${updatedPodfile.slice(0, insertAt)}\n${PLUGIN_LINE}${updatedPodfile.slice(insertAt)}`;
+    } else {
+      updatedPodfile = `${PLUGIN_LINE}\n${updatedPodfile}`;
+    }
   }
 
   const podsBlock = SPM_LINES.join("\n");
