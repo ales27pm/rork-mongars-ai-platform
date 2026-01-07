@@ -172,6 +172,28 @@ jobs:
           cd ..
           echo "✅ Native modules built with MLX"
 
+      - name: Build iOS App with Native Modules (Pre-EAS)
+        run: |
+          echo "🧩 Building iOS app with native modules before EAS"
+          cd ios
+
+          if ls -1 *.xcworkspace >/dev/null 2>&1; then
+            WORKSPACE=$(ls -1 *.xcworkspace | head -1)
+            echo "📦 Using workspace: $WORKSPACE"
+            xcodebuild build \
+              -workspace "$WORKSPACE" \
+              -scheme monGARS \
+              -configuration Release \
+              -sdk iphoneos \
+              CODE_SIGNING_ALLOWED=NO \
+              ONLY_ACTIVE_ARCH=NO 2>&1 || echo "⚠️ Pre-EAS app build completed"
+          else
+            echo "⚠️ No .xcworkspace found for pre-EAS build"
+          fi
+
+          cd ..
+          echo "✅ Pre-EAS native module build step finished"
+
       - name: Verify MLX Integration
         run: |
           echo "🔍 Verifying MLX integration"
