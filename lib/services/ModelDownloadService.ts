@@ -11,7 +11,7 @@ import {
   ModelDownloadFormat,
   resolveModelRoot,
 } from "@/lib/services/model-download-utils";
-import { hfUrl, listRepoFiles } from "@huggingface/hub";
+import { hfUrl, listRepoFiles } from "@/lib/services/huggingface-client";
 
 export class ModelDownloadService {
   private static instance: ModelDownloadService;
