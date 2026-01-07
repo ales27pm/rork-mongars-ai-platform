@@ -484,7 +484,7 @@ public class DolphinCoreMLModule: Module {
 
   private func runEncoding(texts: [String], options: [String: Any]) async throws -> [[Double]] {
     if #available(iOS 18.0, *),
-       options["engine"] as? String == "mlx" || options["preferMLX"] as? Bool == true {
+       (options["engine"] as? String == "mlx" || options["preferMLX"] as? Bool == true) {
       guard try await ensureMLXEngineInitialized(options: options) else {
         throw NSError(domain: "DolphinCoreML", code: -22, userInfo: [NSLocalizedDescriptionKey: "MLX engine unavailable"])
       }
