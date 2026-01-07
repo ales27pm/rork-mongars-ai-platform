@@ -7,10 +7,12 @@
     "start-web": "bunx rork start -p 2agpgihkxtu4agpk7y6uc --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p 2agpgihkxtu4agpk7y6uc --web --tunnel",
     "lint": "expo lint",
+    "test": "jest --runInBand",
     "postinstall": "patch-package"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@huggingface/hub": "^2.7.1",
     "@nkzw/create-context-hook": "^1.1.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@rork-ai/toolkit-sdk": "^0.2.51",

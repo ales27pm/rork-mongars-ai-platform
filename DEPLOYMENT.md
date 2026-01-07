@@ -27,6 +27,7 @@ npm list --depth=0
 ```
 
 **Critical Dependencies Added:**
+
 - ✅ `expo-build-properties` - iOS/Android build configuration
 - ✅ `expo-dev-client` - Development builds support
 - ✅ `expo-updates` - OTA update capabilities
@@ -36,6 +37,7 @@ npm list --depth=0
 ### 3. Configuration Verification
 
 #### app.json (Protected - Manual Review Required)
+
 - [ ] Bundle identifier matches App Store Connect
 - [ ] Version numbers are correct
 - [ ] Privacy descriptions are complete
@@ -43,6 +45,7 @@ npm list --depth=0
 - [ ] Associated domains configured
 
 #### EAS Configuration (Protected - Manual Setup Required)
+
 - [ ] Create `eas.json` with production profile
 - [ ] Configure Apple credentials in EAS
 - [ ] Set up provisioning profiles
@@ -54,6 +57,7 @@ npm list --depth=0
 ### New Core Components
 
 #### 1. **DolphinCoreML Module** (`lib/modules/DolphinCoreML.ts`)
+
 - Type-safe TypeScript bridge for Core ML
 - Batch encoding support
 - Generation capabilities
@@ -61,19 +65,28 @@ npm list --depth=0
 - Simulator fallback for development
 
 **Usage:**
+
 ```typescript
-import { dolphinCoreML } from '@/lib/modules/DolphinCoreML';
+import { dolphinCoreML } from "@/lib/modules/DolphinCoreML";
 
 await dolphinCoreML.initialize({
-  modelName: 'Dolphin',
+  modelName: "Dolphin",
   enableEncryption: true,
-  maxBatchSize: 8
+  maxBatchSize: 8,
 });
 
 const embedding = await dolphinCoreML.encode("Your text here");
 ```
 
+#### 1.1 **Local Model Formats (CoreML + MLX)**
+
+- **CoreML** downloads use `.mlpackage` artifacts and load through the DolphinCoreML module.
+- **MLX** downloads store model assets under a `.mlx` directory and require iOS 18+ devices.
+- The **Local Models** UI displays the format badge so operators can verify which runtime is expected.
+- **MLX pods** are injected during prebuild via `plugins/withMLXPods.js`, which adds the `cocoapods-spm` plugin and `spm_pkg` entries so CocoaPods installs MLX Swift dependencies alongside Expo modules. The plugin wraps the `require` so builds without the gem skip MLX instead of failing. A project `Gemfile` pins `cocoapods-spm`, and CI runs `bundle exec pod install` to ensure the plugin is available.
+
 #### 2. **useLLM2Vec Hook** (`lib/hooks/useLLM2Vec.ts`)
+
 - React hook for easy integration
 - Auto-initialization support
 - Error handling
@@ -81,15 +94,16 @@ const embedding = await dolphinCoreML.encode("Your text here");
 - Metrics refresh
 
 **Usage:**
+
 ```typescript
 import { useLLM2Vec } from '@/lib/hooks/useLLM2Vec';
 
 function MyComponent() {
-  const { 
-    isInitialized, 
-    encode, 
-    encodeBatch, 
-    metrics 
+  const {
+    isInitialized,
+    encode,
+    encodeBatch,
+    metrics
   } = useLLM2Vec({ autoInitialize: true });
 
   const handleEncode = async () => {
@@ -102,32 +116,36 @@ function MyComponent() {
 ```
 
 #### 3. **Monitoring Service** (`lib/services/MonitoringService.ts`)
+
 - Performance tracking
 - Error logging
 - Success rate calculation
 - AsyncStorage-based persistence
 
 **Usage:**
+
 ```typescript
-import { monitoringService } from '@/lib/services/MonitoringService';
+import { monitoringService } from "@/lib/services/MonitoringService";
 
 await monitoringService.trackInference({
-  type: 'encoding',
+  type: "encoding",
   duration: 45.2,
   batchSize: 1,
-  success: true
+  success: true,
 });
 
 const report = await monitoringService.getPerformanceReport();
 ```
 
 #### 4. **PerformanceMetrics Component** (`components/PerformanceMetrics.tsx`)
+
 - Visual performance dashboard
 - Auto-refresh capability
 - Encoding & generation stats
 - Success rate display
 
 **Usage:**
+
 ```typescript
 import { PerformanceMetrics } from '@/components/PerformanceMetrics';
 
@@ -135,12 +153,14 @@ import { PerformanceMetrics } from '@/components/PerformanceMetrics';
 ```
 
 #### 5. **ErrorBoundary Component** (`components/ErrorBoundary.tsx`)
+
 - Global error catching
 - Auto-recovery with exponential backoff
 - Error logging to monitoring service
 - User-friendly error UI
 
 **Usage:**
+
 ```typescript
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -176,19 +196,13 @@ export default function RootLayout() {
 
 ```typescript
 // app/(tabs)/chat.tsx or similar
-import { useLLM2Vec } from '@/lib/hooks/useLLM2Vec';
+import { useLLM2Vec } from "@/lib/hooks/useLLM2Vec";
 
 export default function ChatScreen() {
-  const { 
-    isInitialized, 
-    isLoading, 
-    error,
-    encode,
-    generate 
-  } = useLLM2Vec({
+  const { isInitialized, isLoading, error, encode, generate } = useLLM2Vec({
     autoInitialize: true,
-    onReady: () => console.log('Model ready!'),
-    onError: (err) => console.error('Model error:', err)
+    onReady: () => console.log("Model ready!"),
+    onError: (err) => console.error("Model error:", err),
   });
 
   // Use encode() and generate() methods
@@ -215,6 +229,7 @@ export default function DiagnosticsScreen() {
 ## 🧪 Testing Checklist
 
 ### Unit Tests
+
 ```bash
 # Run tests
 npm test
@@ -231,6 +246,7 @@ npm run test:watch
 - [ ] No critical test failures
 
 ### Type Checking
+
 ```bash
 # TypeScript check
 npm run typecheck
@@ -243,6 +259,7 @@ npx tsc --noEmit
 - [ ] Types are properly defined
 
 ### Lint Check
+
 ```bash
 npm run lint
 ```
@@ -253,6 +270,7 @@ npm run lint
 ### Manual Testing Checklist
 
 #### Core Functionality
+
 - [ ] App launches successfully
 - [ ] LLM2Vec model initializes
 - [ ] Text encoding works
@@ -263,6 +281,7 @@ npm run lint
 - [ ] Auto-recovery works after errors
 
 #### Performance
+
 - [ ] Initial load time < 3 seconds
 - [ ] Encoding latency < 100ms per text
 - [ ] Memory usage stable
@@ -270,6 +289,7 @@ npm run lint
 - [ ] App remains responsive during inference
 
 #### Error Handling
+
 - [ ] Network errors handled gracefully
 - [ ] Model initialization failures recovered
 - [ ] Invalid input rejected properly
@@ -291,6 +311,10 @@ npm start -- --ios
 # Physical device (with tunnel)
 npm start -- --tunnel
 ```
+
+### Native Module Verification (CI)
+
+The iOS workflow (`github/workflows/ios-native-build.yml`) performs checks to ensure native sources are present and the Podfile resolves the ExpoModulesCore + DolphinCoreML module references before building.
 
 ### Production Build (Manual - When EAS Configured)
 
@@ -315,6 +339,7 @@ eas submit --platform ios --latest
 ### Performance Metrics
 
 The app tracks:
+
 - **Inference latency** (average, median, p95)
 - **Success rate** (percentage of successful operations)
 - **Total inferences** (lifetime count)
@@ -324,7 +349,7 @@ The app tracks:
 ### Accessing Metrics
 
 ```typescript
-import { monitoringService } from '@/lib/services/MonitoringService';
+import { monitoringService } from "@/lib/services/MonitoringService";
 
 // Get performance report
 const report = await monitoringService.getPerformanceReport();
@@ -347,18 +372,22 @@ await monitoringService.clearData();
 **Location:** `.github/workflows/ios-production.yml`
 
 **Stages:**
+
 1. **Quality Gate** - TypeScript, ESLint, Tests
 2. **Build Preview** - PR builds
 3. **Security Scan** - Dependency audit
 4. **Performance Check** - Bundle analysis
 5. **Deploy Production** - Main branch deployment
+6. **Native Module Verification** - Swift/Kotlin source presence + iOS Podfile linkage
 
 **Triggers:**
+
 - Push to `main` or `develop`
 - Pull requests to `main`
 - Manual workflow dispatch
 
 **To Enable Full EAS Build:**
+
 1. Add `EXPO_TOKEN` to GitHub Secrets
 2. Configure Apple credentials in EAS
 3. Uncomment EAS build commands in workflow
@@ -369,14 +398,14 @@ await monitoringService.clearData();
 
 ### Target Metrics
 
-| Metric | Target | Acceptable |
-|--------|--------|------------|
-| Cold Start | < 2s | < 3s |
-| Model Init | < 500ms | < 1s |
-| Single Encode | < 50ms | < 100ms |
-| Batch Encode (8) | < 200ms | < 400ms |
-| Memory Usage | < 300MB | < 500MB |
-| Success Rate | > 99% | > 95% |
+| Metric           | Target  | Acceptable |
+| ---------------- | ------- | ---------- |
+| Cold Start       | < 2s    | < 3s       |
+| Model Init       | < 500ms | < 1s       |
+| Single Encode    | < 50ms  | < 100ms    |
+| Batch Encode (8) | < 200ms | < 400ms    |
+| Memory Usage     | < 300MB | < 500MB    |
+| Success Rate     | > 99%   | > 95%      |
 
 ### Optimization Tips
 
@@ -410,10 +439,11 @@ await monitoringService.clearData();
 ### Common Issues
 
 #### Model Not Initializing
+
 ```typescript
 // Check platform
-if (Platform.OS !== 'ios') {
-  console.warn('Core ML only available on iOS');
+if (Platform.OS !== "ios") {
+  console.warn("Core ML only available on iOS");
 }
 
 // Verify initialization
@@ -422,6 +452,7 @@ console.log({ isInitialized, error });
 ```
 
 #### Performance Degradation
+
 ```typescript
 // Clear monitoring data
 await monitoringService.clearData();
@@ -432,10 +463,11 @@ console.log(metrics);
 ```
 
 #### Error Boundary Not Catching
+
 ```typescript
 // Ensure ErrorBoundary wraps your component tree
 // Check that errors are thrown, not caught silently
-throw new Error('Test error'); // Should be caught
+throw new Error("Test error"); // Should be caught
 ```
 
 ---
@@ -443,11 +475,13 @@ throw new Error('Test error'); // Should be caught
 ## 📚 Additional Resources
 
 ### Documentation
+
 - [Expo Documentation](https://docs.expo.dev/)
 - [React Native Documentation](https://reactnative.dev/)
 - [Core ML Documentation](https://developer.apple.com/documentation/coreml)
 
 ### Tools
+
 - [Expo Dev Tools](https://docs.expo.dev/workflow/debugging/)
 - [React Native Debugger](https://github.com/jhen0409/react-native-debugger)
 - [Flipper](https://fbflipper.com/)
@@ -457,6 +491,7 @@ throw new Error('Test error'); // Should be caught
 ## ✅ Final Deployment Checklist
 
 ### Pre-Production
+
 - [ ] All tests passing
 - [ ] TypeScript errors resolved
 - [ ] Security audit completed
@@ -465,6 +500,7 @@ throw new Error('Test error'); // Should be caught
 - [ ] Documentation reviewed
 
 ### Production Ready
+
 - [ ] App Store Connect configured
 - [ ] Certificates & provisioning profiles valid
 - [ ] Privacy policy updated
@@ -474,6 +510,7 @@ throw new Error('Test error'); // Should be caught
 - [ ] Monitoring alerts set up
 
 ### Post-Deployment
+
 - [ ] Monitor crash reports
 - [ ] Track performance metrics
 - [ ] Collect user feedback
@@ -485,6 +522,7 @@ throw new Error('Test error'); // Should be caught
 ## 🎉 Next Steps
 
 1. **Test the Implementation**
+
    ```bash
    npm start
    ```
@@ -499,6 +537,7 @@ throw new Error('Test error'); // Should be caught
    - Add Apple credentials
 
 4. **Deploy to TestFlight** (When Ready)
+
    ```bash
    eas build --platform ios --profile production
    eas submit --platform ios --latest
