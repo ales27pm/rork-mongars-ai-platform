@@ -172,7 +172,7 @@ jobs:
             -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO \
-            SWIFT_PACKAGE_FETCHING=YES 2>&1 || echo "⚠️ Module build completed"
+            SWIFT_PACKAGE_FETCHING=YES 2>&1
 
           echo "📦 Verifying MLX Swift packages"
           find . -name "*.swift" -path "*/MLX*" | head -10 || echo "MLX packages not found in build artifacts"
