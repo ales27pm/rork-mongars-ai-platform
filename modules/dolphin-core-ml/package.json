@@ -2,6 +2,7 @@
   "name": "dolphin-core-ml",
   "version": "0.0.1",
   "private": true,
+  "main": "index.js",
   "dependencies": {
     "expo-modules-core": "*"
   }
