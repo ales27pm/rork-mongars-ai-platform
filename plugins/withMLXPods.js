@@ -37,14 +37,18 @@ const ensureMLXPods = (podfile) => {
   }
 
   const podsBlock = `if defined?(spm_pkg)\n${SPM_LINES.join("\n")}\nend`;
-  if (podfile.includes("use_expo_modules!")) {
+  const hasSpmBlockAlready =
+    SPM_LINES.some((line) => updatedPodfile.includes(line)) ||
+    updatedPodfile.includes('spm_pkg "mlx-swift"');
+
+  if (!hasSpmBlockAlready && updatedPodfile.includes("use_expo_modules!")) {
     return updatedPodfile.replace(
       "use_expo_modules!",
       `use_expo_modules!\n${podsBlock}`,
     );
   }
 
-  if (podfile.includes("use_react_native!")) {
+  if (!hasSpmBlockAlready && updatedPodfile.includes("use_react_native!")) {
     return updatedPodfile.replace(
       "use_react_native!",
       `use_react_native!\n${podsBlock}`,
