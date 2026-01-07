@@ -134,13 +134,33 @@ jobs:
       - name: "🗂️ Prepare artifacts"
         run: |
           mkdir -p artifacts/ios
-          BUILD_LIST_JSON=$(eas build:list --platform ios --limit 1 --json --non-interactive --no-color | sed -n '/^\[/,$p')
+          BUILD_LIST_JSON=$(eas build:list --platform ios --limit 1 --json --non-interactive --no-color 2>&1 | python - <<'PY'
+          import sys
+
+          data = sys.stdin.read()
+          start = data.find("[")
+          end = data.rfind("]")
+          if start == -1 or end == -1 or end < start:
+              sys.exit(1)
+          sys.stdout.write(data[start : end + 1])
+          PY
+          )
           BUILD_ID=$(echo "$BUILD_LIST_JSON" | jq -r '.[0].id')
           if [ -z "$BUILD_ID" ] || [ "$BUILD_ID" = "null" ]; then
             echo "❌ Unable to determine latest iOS build ID"
             exit 1
           fi
-          BUILD_VIEW_JSON=$(eas build:view "$BUILD_ID" --json --non-interactive --no-color | sed -n '/^{/,$p')
+          BUILD_VIEW_JSON=$(eas build:view "$BUILD_ID" --json --non-interactive --no-color 2>&1 | python - <<'PY'
+          import sys
+
+          data = sys.stdin.read()
+          start = data.find("{")
+          end = data.rfind("}")
+          if start == -1 or end == -1 or end < start:
+              sys.exit(1)
+          sys.stdout.write(data[start : end + 1])
+          PY
+          )
           ARTIFACT_URL=$(echo "$BUILD_VIEW_JSON" | jq -r '.artifacts.buildUrl')
           if [ -z "$ARTIFACT_URL" ] || [ "$ARTIFACT_URL" = "null" ]; then
             echo "❌ Unable to resolve artifact URL for build $BUILD_ID"
