@@ -34,6 +34,18 @@ const SPM_FILELIST_GUARD = [
   "      end",
   "    end",
   "  end",
+  "  # Remove stale modulemap references that break archive builds.",
+  "  installer.pods_project.targets.each do |target|",
+  "    target.build_configurations.each do |config|",
+  "      config_ref = config.base_configuration_reference",
+  "      next unless config_ref",
+  "      xcconfig_path = config_ref.real_path",
+  "      next unless xcconfig_path && File.exist?(xcconfig_path)",
+  "      xcconfig = File.read(xcconfig_path)",
+  "      updated = xcconfig.gsub(/-fmodule-map-file=[^\\s]*Cmlx\\.modulemap\\s*/, '')",
+  "      File.write(xcconfig_path, updated) if updated != xcconfig",
+  "    end",
+  "  end",
 ].join("\n");
 
 const ensureMLXPods = (podfile) => {
