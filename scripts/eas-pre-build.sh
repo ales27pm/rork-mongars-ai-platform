@@ -55,7 +55,27 @@ if [[ -f "${PBXPROJ}" ]] && grep -qi "Cmlx\.modulemap" "${PBXPROJ}"; then
   mv "${tmp}" "${PBXPROJ}"
 fi
 
-# 3) Sanity: fail-fast if still present (makes CI logs clearer)
+# 3) Strip modulemap tokens from Pods project xcconfig references if present.
+PODS_XCCONFIGS=$(find "${PODS_DIR}" -path "*Target Support Files*" -name "*.xcconfig" 2>/dev/null || true)
+if [[ -n "${PODS_XCCONFIGS}" ]]; then
+  while IFS= read -r f; do
+    if grep -qi "Cmlx\.modulemap" "${f}"; then
+      echo "[eas-pre-build] Stripping Cmlx.modulemap from: ${f}"
+      tmp="$(mktemp)"
+      awk 'BEGIN{IGNORECASE=1} {
+        line=$0
+        if (line ~ /Cmlx\.modulemap/) {
+          gsub(/-fmodule-map-file(=|[[:space:]]+)[^[:space:]\"]*Cmlx\.modulemap[^[:space:]\"]*/, "", line)
+          gsub(/[^[:space:]\"]*Cmlx\.modulemap[^[:space:]\"]*/, "", line)
+        }
+        print line
+      }' "${f}" > "${tmp}"
+      mv "${tmp}" "${f}"
+    fi
+  done <<< "${PODS_XCCONFIGS}"
+fi
+
+# 4) Sanity: fail-fast if still present (makes CI logs clearer)
 if grep -Rqi "Cmlx\.modulemap" "${PODS_DIR}"; then
   echo "[eas-pre-build] ERROR: Cmlx.modulemap references still present after cleanup."
   echo "[eas-pre-build] Showing remaining hits (first 50):"
