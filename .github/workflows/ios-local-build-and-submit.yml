@@ -16,6 +16,7 @@ jobs:
     env:
       EAS_ACCESS_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_TOKEN }}
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_TOKEN }}
+      EXPO_PROJECT_ID: ${{ secrets.EXPO_PROJECT_ID }}
 
     steps:
       - name: Checkout repository
@@ -27,6 +28,13 @@ jobs:
             echo "❌ EXPO_TOKEN/EAS_TOKEN is required for EAS CLI authentication."
             echo "➡️  Add EXPO_TOKEN (preferred) or EAS_TOKEN as a repository secret."
             exit 1
+          fi
+          if ! node -e "const app=require('./app.json'); const id=app?.expo?.extra?.eas?.projectId; process.exit(id?0:1)"; then
+            if [ -z "${EXPO_PROJECT_ID}" ]; then
+              echo "❌ EAS project is not configured."
+              echo "➡️  Add EXPO_PROJECT_ID (EAS project ID) as a repository secret or commit expo.extra.eas.projectId to app.json."
+              exit 1
+            fi
           fi
 
       - name: Set up Node.js
@@ -49,6 +57,15 @@ jobs:
 
       - name: Set up EAS CLI
         run: npm install -g eas-cli
+
+      - name: Ensure EAS project is configured
+        env:
+          EXPO_PROJECT_ID: ${{ secrets.EXPO_PROJECT_ID }}
+        run: |
+          if ! node -e "const app=require('./app.json'); const id=app?.expo?.extra?.eas?.projectId; process.exit(id?0:1)"; then
+            echo "🧩 Injecting expo.extra.eas.projectId into app.json"
+            node -e "const fs=require('fs');const app=require('./app.json');app.expo=app.expo||{};app.expo.extra=app.expo.extra||{};app.expo.extra.eas=app.expo.extra.eas||{};app.expo.extra.eas.projectId=process.env.EXPO_PROJECT_ID;fs.writeFileSync('app.json', JSON.stringify(app, null, 2)+'\\n');"
+          fi
 
       - name: Run EAS Build (Local)
         run: |
