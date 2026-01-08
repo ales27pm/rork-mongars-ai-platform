@@ -10,9 +10,9 @@ const REQUIRE_BLOCK = [
 ].join("\n");
 const PLUGIN_LINE = "plugin 'cocoapods-spm'";
 const SPM_LINES = [
-  'spm_pkg "mlx-swift", :git => "https://github.com/ml-explore/mlx-swift", :commit => "072b684acaae80b6a463abab3a103732f33774bf"',
-  'spm_pkg "mlx-swift-examples", :git => "https://github.com/ml-explore/mlx-swift-examples", :commit => "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631"',
-  'spm_pkg "swift-transformers", :git => "https://github.com/huggingface/swift-transformers", :version => "1.0.0"',
+  'spm_pkg "mlx-swift", :git => "https://github.com/ml-explore/mlx-swift", :commit => "072b684acaae80b6a463abab3a103732f33774bf", :products => ["MLX", "MLXRandom", "MLXNN", "MLXOptimizers", "MLXFFT", "MLXLinalg", "MLXFast"]',
+  'spm_pkg "mlx-swift-examples", :git => "https://github.com/ml-explore/mlx-swift-examples", :commit => "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631", :products => ["MLXLLM", "MLXVLM", "MLXLMCommon", "MLXMNIST", "MLXEmbedders", "StableDiffusion"]',
+  'spm_pkg "swift-transformers", :git => "https://github.com/huggingface/swift-transformers", :version => "1.0.0", :products => ["Transformers"]',
 ];
 
 const ensureMLXPods = (podfile) => {

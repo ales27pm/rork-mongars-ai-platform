@@ -1,77 +1,124 @@
-name: iOS Build and Submit (Local)
+name: iOS Local Build (GH Actions) + Submit (EAS)
 
 on:
-  workflow_dispatch:
-    inputs:
-      target_branch:
-        description: "Branch to run this workflow on"
-        required: true
-        default: "main"
+  push:
+    branches: [main]
+  pull_request:
 
 jobs:
-  build-and-submit:
-    if: github.ref_name == inputs.target_branch
+  ios-local-build:
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
+
     env:
+      # ✅ Modern EAS auth in CI: use an access token via env var.
+      # Keep both names for compatibility with different eas-cli behaviors.
       EAS_ACCESS_TOKEN: ${{ secrets.EXPO_TOKEN }}
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+
+      # 🔒 Safety: explicitly blank this so a repository/org-level env var can't hijack the build.
+      # (Your error came from an EAS_PROJECT_ID that points to a different slug/project.)
+      EAS_PROJECT_ID: ""
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate Expo token
-        run: |
-          if [ -z "${EXPO_TOKEN}" ]; then
-            echo "❌ EXPO_TOKEN is required for EAS CLI authentication."
-            echo "➡️  Add EXPO_TOKEN as a repository secret."
-            exit 1
-          fi
-          if ! node -e "const app=require('./app.json'); const id=app?.expo?.extra?.eas?.projectId; process.exit(id?0:1)"; then
-            if [ -z "${EAS_PROJECT_ID}" ]; then
-              echo "❌ EAS project is not configured."
-              echo "➡️  Add EAS_PROJECT_ID (EAS project ID) as a repository secret or commit expo.extra.eas.projectId to app.json."
-              exit 1
-            fi
-          fi
-
-      - name: Set up Node.js
+      - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 3.0
 
-      - name: Install system dependencies
+      - name: Install system dependencies (CocoaPods + cocoapods-spm)
         run: |
           brew install cocoapods
           gem install cocoapods-spm --no-document
+          brew install fastlane
 
-      - name: Install npm dependencies
+      - name: Install JS dependencies
         run: npm ci
 
-      - name: Set up EAS CLI
+      - name: Install EAS CLI
         run: npm install -g eas-cli
 
-      - name: Ensure EAS project is configured
-        env:
-          EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+      - name: Verify EAS auth
+        run: eas whoami
+
+      - name: Validate EAS project ID matches slug
         run: |
-          if ! node -e "const app=require('./app.json'); const id=app?.expo?.extra?.eas?.projectId; process.exit(id?0:1)"; then
-            echo "🧩 Injecting expo.extra.eas.projectId into app.json"
-            node -e "const fs=require('fs');const app=require('./app.json');app.expo=app.expo||{};app.expo.extra=app.expo.extra||{};app.expo.extra.eas=app.expo.extra.eas||{};app.expo.extra.eas.projectId=process.env.EAS_PROJECT_ID;fs.writeFileSync('app.json', JSON.stringify(app, null, 2)+'\\n');"
+          node - <<'NODE'
+          const { execSync } = require('child_process');
+
+          const app = require('./app.json');
+          const slug = app?.expo?.slug;
+          const projectId = app?.expo?.extra?.eas?.projectId;
+
+          if (!slug || !projectId) {
+            process.exit(0);
+          }
+
+          let info;
+          try {
+            info = JSON.parse(
+              execSync('eas project:info --json', {
+                stdio: ['ignore', 'pipe', 'pipe'],
+                env: {
+                  ...process.env,
+                  EAS_PROJECT_ID: projectId,
+                },
+              })
+                .toString()
+                .trim(),
+            );
+          } catch (error) {
+            console.warn(
+              'Unable to fetch EAS project info; skipping slug validation.',
+            );
+            process.exit(0);
+          }
+
+          const infoSlug = info?.slug ?? info?.project?.slug ?? info?.name;
+          if (infoSlug && infoSlug !== slug) {
+            throw new Error(
+              `EAS project slug "${infoSlug}" does not match app.json slug "${slug}".`,
+            );
+          }
+          NODE
+
+      - name: Validate local iOS credentials are available
+        run: |
+          if [ ! -f credentials.json ]; then
+            echo "❌ credentials.json is required for local builds. Run 'eas credentials --platform ios' and download credentials locally." >&2
+            exit 1
+          fi
+          if [ ! -f credentials/ios/dist-cert.p12 ]; then
+            echo "❌ Missing credentials/ios/dist-cert.p12. Re-download credentials with 'eas credentials --platform ios'." >&2
+            exit 1
+          fi
+          if [ ! -f credentials/ios/profile.mobileprovision ]; then
+            echo "❌ Missing credentials/ios/profile.mobileprovision. Re-download credentials with 'eas credentials --platform ios'." >&2
+            exit 1
           fi
 
-      - name: Run EAS Build (Local)
+      - name: Build iOS (local)
         run: |
           mkdir -p artifacts/ios
           eas build --platform ios --local --profile production --non-interactive --output artifacts/ios/build.ipa
 
-      - name: Submit to App Store
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: artifacts/ios/build.ipa
+          if-no-files-found: error
+
+      - name: Submit to App Store Connect (push to main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           eas submit --platform ios --profile production --path artifacts/ios/build.ipa --non-interactive
