@@ -27,6 +27,7 @@ if (projectId) {
 
 module.exports = {
   ...expoConfig,
+  owner: expoConfig.owner ?? "ales27pm",
   slug: resolvedSlug,
   extra,
 };
