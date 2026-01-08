@@ -52,12 +52,11 @@ jobs:
       - name: Validate EAS project ID matches slug
         run: |
           node - <<'NODE'
-          const fs = require('fs');
           const { execSync } = require('child_process');
 
           const app = require('./app.json');
           const slug = app?.expo?.slug;
-          const projectId = process.env.EAS_PROJECT_ID;
+          const projectId = app?.expo?.extra?.eas?.projectId;
 
           if (!slug || !projectId) {
             process.exit(0);
@@ -68,6 +67,10 @@ jobs:
             info = JSON.parse(
               execSync('eas project:info --json', {
                 stdio: ['ignore', 'pipe', 'pipe'],
+                env: {
+                  ...process.env,
+                  EAS_PROJECT_ID: projectId,
+                },
               })
                 .toString()
                 .trim(),
@@ -81,19 +84,11 @@ jobs:
 
           const infoSlug = info?.slug ?? info?.project?.slug ?? info?.name;
           if (infoSlug && infoSlug !== slug) {
-            console.warn(
-              `EAS_PROJECT_ID is linked to slug "${infoSlug}" but app.json slug is "${slug}". Clearing EAS_PROJECT_ID.`,
+            throw new Error(
+              `EAS project slug "${infoSlug}" does not match app.json slug "${slug}".`,
             );
-            fs.appendFileSync(process.env.GITHUB_ENV, 'EAS_PROJECT_ID=\\n');
           }
           NODE
-
-      - name: Link/create EAS project (non-interactive)
-        # This writes expo.extra.eas.projectId into your config when missing,
-        # and links the project so non-interactive builds work in CI.
-        run: |
-          eas project:init --non-interactive --force
-          eas project:info || true
 
       - name: Build iOS (local)
         run: |
