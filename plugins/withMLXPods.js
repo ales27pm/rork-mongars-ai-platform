@@ -14,6 +14,7 @@ const SPM_LINES = [
   'spm_pkg "mlx-swift-examples", :git => "https://github.com/ml-explore/mlx-swift-examples", :commit => "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631", :products => ["MLXLLM", "MLXVLM", "MLXLMCommon", "MLXMNIST", "MLXEmbedders", "StableDiffusion"]',
   'spm_pkg "swift-transformers", :git => "https://github.com/huggingface/swift-transformers", :version => "1.0.0", :products => ["Transformers"]',
 ];
+
 const SPM_FILELIST_GUARD = [
   "  # Work around cocoapods-spm expecting resource xcfilelist files in CI.",
   "  require 'fileutils'",
@@ -61,11 +62,16 @@ const SPM_FILELIST_GUARD = [
   "      sanitize = lambda do |value|",
   "        if value.is_a?(Array)",
   "          value.filter_map do |item|",
-  "            cleaned = item.to_s.gsub(/[^\\s]*Cmlx\\.modulemap[^\\s]*/, '')",
+  "            cleaned = item.to_s",
+  "              .gsub(/-fmodule-map-file(=|\\s+)[^\\s]*Cmlx\\.modulemap[^\\s]*/, '')",
+  "              .gsub(/[^\\s]*Cmlx\\.modulemap[^\\s]*/, '')",
   "            cleaned.strip.empty? ? nil : cleaned",
   "          end",
   "        else",
-  "          value.to_s.gsub(/[^\\s]*Cmlx\\.modulemap[^\\s]*/, '').strip",
+  "          value.to_s",
+  "            .gsub(/-fmodule-map-file(=|\\s+)[^\\s]*Cmlx\\.modulemap[^\\s]*/, '')",
+  "            .gsub(/[^\\s]*Cmlx\\.modulemap[^\\s]*/, '')",
+  "            .strip",
   "        end",
   "      end",
   "      settings.keys.each do |key|",
@@ -79,8 +85,19 @@ const SPM_FILELIST_GUARD = [
   "    end",
   "  end",
 ].join("\n");
+
 const SPM_MODULEMAP_CLEANUP = [
   "  # Ensure modulemap cleanup runs after post_integrate hooks too.",
+  "  installer.aggregate_targets.each do |aggregate_target|",
+  "    Dir.glob(File.join(aggregate_target.support_files_dir, '*.xcconfig')).each do |xcconfig_path|",
+  "      xcconfig = File.read(xcconfig_path)",
+  "      updated = xcconfig",
+  "        .lines",
+  "        .reject { |line| line.include?('Cmlx.modulemap') }",
+  "        .join",
+  "      File.write(xcconfig_path, updated) if updated != xcconfig",
+  "    end",
+  "  end",
   "  installer.pods_project.targets.each do |target|",
   "    target.build_configurations.each do |config|",
   "      config_ref = config.base_configuration_reference",
@@ -99,11 +116,16 @@ const SPM_MODULEMAP_CLEANUP = [
   "      sanitize = lambda do |value|",
   "        if value.is_a?(Array)",
   "          value.filter_map do |item|",
-  "            cleaned = item.to_s.gsub(/[^\\s]*Cmlx\\.modulemap[^\\s]*/, '')",
+  "            cleaned = item.to_s",
+  "              .gsub(/-fmodule-map-file(=|\\s+)[^\\s]*Cmlx\\.modulemap[^\\s]*/, '')",
+  "              .gsub(/[^\\s]*Cmlx\\.modulemap[^\\s]*/, '')",
   "            cleaned.strip.empty? ? nil : cleaned",
   "          end",
   "        else",
-  "          value.to_s.gsub(/[^\\s]*Cmlx\\.modulemap[^\\s]*/, '').strip",
+  "          value.to_s",
+  "            .gsub(/-fmodule-map-file(=|\\s+)[^\\s]*Cmlx\\.modulemap[^\\s]*/, '')",
+  "            .gsub(/[^\\s]*Cmlx\\.modulemap[^\\s]*/, '')",
+  "            .strip",
   "        end",
   "      end",
   "      settings.keys.each do |key|",
@@ -175,22 +197,69 @@ const ensureSpmFilelistGuard = (podfile) => {
     return podfile;
   }
 
+  const injectBeforeEndOfBlock = (contents, blockName, rubyLines) => {
+    // We need to inject *near the end* of the block, but Podfile blocks contain many nested `end`s.
+    // Heuristic: pick the `end` at column 0 whose next non-empty, non-comment line starts a new top-level DSL block.
+    const startNeedle = `${blockName} do |installer|`;
+    const startIdx = contents.indexOf(startNeedle);
+    if (startIdx === -1) return null;
+
+    const afterStartIdx = startIdx + startNeedle.length;
+    const endRe = /^end\s*$/gm;
+    let match;
+    while ((match = endRe.exec(contents)) !== null) {
+      if (match.index <= afterStartIdx) continue;
+
+      const endLineStart = match.index;
+      const endLineEnd = match.index + match[0].length;
+
+      const after = contents.slice(endLineEnd);
+      const nextSignificant = after
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => line.length > 0 && !line.startsWith("#"));
+
+      const looksLikeBlockBoundary =
+        nextSignificant === undefined ||
+        nextSignificant.startsWith("post_") ||
+        nextSignificant.startsWith("target ") ||
+        nextSignificant.startsWith("abstract_target ") ||
+        nextSignificant.startsWith("install!") ||
+        nextSignificant.startsWith("platform ") ||
+        nextSignificant.startsWith("use_") ||
+        nextSignificant.startsWith("inhibit_all_warnings!") ||
+        nextSignificant.startsWith("workspace ");
+
+      if (!looksLikeBlockBoundary) continue;
+
+      // Insert *before* this `end` line.
+      return `${contents.slice(0, endLineStart)}${rubyLines}\n${contents.slice(endLineStart)}`;
+    }
+
+    return null;
+  };
+
   let updatedPodfile = podfile;
 
-  if (updatedPodfile.includes("post_install do |installer|")) {
-    updatedPodfile = updatedPodfile.replace(
-      "post_install do |installer|",
-      `post_install do |installer|\n${SPM_FILELIST_GUARD}`,
-    );
+  const postInstallInjected = injectBeforeEndOfBlock(
+    updatedPodfile,
+    "post_install",
+    SPM_FILELIST_GUARD,
+  );
+  if (postInstallInjected) {
+    updatedPodfile = postInstallInjected;
   } else {
+    // No post_install block: create one and run our guard at the end.
     updatedPodfile = `${updatedPodfile}\n\npost_install do |installer|\n${SPM_FILELIST_GUARD}\nend\n`;
   }
 
-  if (updatedPodfile.includes("post_integrate do |installer|")) {
-    return updatedPodfile.replace(
-      "post_integrate do |installer|",
-      `post_integrate do |installer|\n${SPM_MODULEMAP_CLEANUP}`,
-    );
+  const postIntegrateInjected = injectBeforeEndOfBlock(
+    updatedPodfile,
+    "post_integrate",
+    SPM_MODULEMAP_CLEANUP,
+  );
+  if (postIntegrateInjected) {
+    return postIntegrateInjected;
   }
 
   return `${updatedPodfile}\n\npost_integrate do |installer|\n${SPM_MODULEMAP_CLEANUP}\nend\n`;
