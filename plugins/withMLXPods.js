@@ -197,18 +197,38 @@ const ensureSpmFilelistGuard = (podfile) => {
     return podfile;
   }
 
-  const injectAfterBlockStart = (contents, blockName, rubyLines) => {
+  const injectBeforeBlockEnd = (contents, blockName, rubyLines) => {
     const startNeedle = `${blockName} do |installer|`;
-    const startIdx = contents.indexOf(startNeedle);
-    if (startIdx === -1) return null;
+    const lines = contents.split(/\r?\n/);
+    const startIndex = lines.findIndex((line) => line.includes(startNeedle));
+    if (startIndex === -1) return null;
 
-    const insertAt = startIdx + startNeedle.length;
-    return `${contents.slice(0, insertAt)}\n${rubyLines}${contents.slice(insertAt)}`;
+    const stripComments = (line) => line.replace(/#.*$/, "");
+    const countToken = (line, token) => {
+      const matches = stripComments(line).match(
+        new RegExp(`\\b${token}\\b`, "g"),
+      );
+      return matches ? matches.length : 0;
+    };
+
+    let depth = 1;
+    for (let i = startIndex + 1; i < lines.length; i += 1) {
+      const line = lines[i];
+      depth += countToken(line, "do");
+      depth -= countToken(line, "end");
+
+      if (depth === 0) {
+        lines.splice(i, 0, ...rubyLines.split("\n"));
+        return lines.join("\n");
+      }
+    }
+
+    return null;
   };
 
   let updatedPodfile = podfile;
 
-  const postInstallInjected = injectAfterBlockStart(
+  const postInstallInjected = injectBeforeBlockEnd(
     updatedPodfile,
     "post_install",
     SPM_FILELIST_GUARD,
@@ -220,7 +240,7 @@ const ensureSpmFilelistGuard = (podfile) => {
     updatedPodfile = `${updatedPodfile}\n\npost_install do |installer|\n${SPM_FILELIST_GUARD}\nend\n`;
   }
 
-  const postIntegrateInjected = injectAfterBlockStart(
+  const postIntegrateInjected = injectBeforeBlockEnd(
     updatedPodfile,
     "post_integrate",
     SPM_MODULEMAP_CLEANUP,
