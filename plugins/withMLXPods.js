@@ -1,47 +1,54 @@
-const { withPodfile } = require("@expo/config-plugins");
+const { withPodfile, withXcodeProject } = require("@expo/config-plugins");
 
-const REQUIRE_BLOCK = [
-  "begin",
-  "  require 'cocoapods-spm'",
-  "  plugin 'cocoapods-spm'",
-  "rescue LoadError",
-  "  Pod::UI.warn('[withMLXPods] cocoapods-spm gem not available, skipping MLX SPM integration')",
-  "end",
-].join("\n");
-const PLUGIN_LINE = "plugin 'cocoapods-spm'";
-const SPM_LINES = [
-  'spm_pkg "mlx-swift", :git => "https://github.com/ml-explore/mlx-swift", :commit => "072b684acaae80b6a463abab3a103732f33774bf", :products => ["MLX", "MLXRandom", "MLXNN", "MLXOptimizers", "MLXFFT", "MLXLinalg", "MLXFast"]',
-  'spm_pkg "mlx-swift-examples", :git => "https://github.com/ml-explore/mlx-swift-examples", :commit => "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631", :products => ["MLXLLM", "MLXVLM", "MLXLMCommon", "MLXMNIST", "MLXEmbedders", "StableDiffusion"]',
-  'spm_pkg "swift-transformers", :git => "https://github.com/huggingface/swift-transformers", :version => "1.0.0", :products => ["Transformers"]',
-];
+const SPM_PLUGIN = "plugin 'cocoapods-spm'";
+const SPM_PKG =
+  "spm_pkg 'mlx-swift', :git => 'https://github.com/ml-explore/mlx-swift.git', :tag => '0.25.6', :products => ['MLX', 'MLXRandom', 'MLXNN', 'MLXOptimizers', 'MLXFFT', 'MLXLinalg', 'MLXFast']";
 
 const SPM_FILELIST_GUARD = [
   "  # Work around cocoapods-spm expecting resource xcfilelist files in CI.",
+  "  # Also disable Xcode Explicit Modules for CocoaPods targets (Xcode 16+/26 can emit stale -fmodule-map-file flags).",
   "  require 'fileutils'",
-  "  # Archive builds can fail if explicit modules are enabled and a stale modulemap path is injected.",
-  "  # We force-disable explicit modules and scrub any references to Cmlx.modulemap wherever they appear.",
+  "  explicit_module_keys = %w[",
+  "    SWIFT_ENABLE_EXPLICIT_MODULES",
+  "    _EXPERIMENTAL_SWIFT_EXPLICIT_MODULES",
+  "    CLANG_ENABLE_EXPLICIT_MODULES",
+  "    _EXPERIMENTAL_CLANG_EXPLICIT_MODULES",
+  "    ENABLE_EXPLICIT_MODULES",
+  "  ]",
+  "  disable_explicit_modules = lambda do |settings|",
+  "    explicit_module_keys.each do |k|",
+  "      settings[k] = 'NO'",
+  "    end",
+  "  end",
   "  strip_modulemap_flags = lambda do |value|",
-  "    return value unless value.to_s.include?('Cmlx.modulemap')",
-  "    scrubbed = value.to_s",
-  "      .gsub(/-fmodule-map-file(=|\\s+)[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
-  "      .gsub(/[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
+  "    s = value.to_s",
+  "    return value unless s.include?('Cmlx.modulemap')",
+  "    scrubbed = s",
+  "      .gsub(/-fmodule-map-file(?:=|\\s+)(?:\\\"|')?[^\\s\\\"']*Cmlx\\.modulemap[^\\s\\\"']*(?:\\\"|')?/, '')",
+  "      .gsub(/\\s+/, ' ')",
   "      .strip",
   "    scrubbed.empty? ? nil : scrubbed",
   "  end",
-  "  force_disable_explicit_modules = lambda do |settings|",
-  "    settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'",
-  "    settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'",
-  "  end",
   "  scrub_build_settings = lambda do |settings|",
-  "    force_disable_explicit_modules.call(settings)",
+  "    disable_explicit_modules.call(settings)",
   "    settings.keys.each do |key|",
-  "      value = settings[key]",
-  "      next unless value.to_s.include?('Cmlx.modulemap')",
-  "      if value.is_a?(Array)",
-  "        sanitized = value.filter_map { |item| strip_modulemap_flags.call(item) }",
-  "        settings[key] = sanitized",
+  "      next unless settings[key].is_a?(String)",
+  "      if settings[key].include?('Cmlx.modulemap')",
+  "        cleaned = strip_modulemap_flags.call(settings[key])",
+  "        if cleaned.nil?",
+  "          settings.delete(key)",
+  "        else",
+  "          settings[key] = cleaned",
+  "        end",
+  "      end",
+  "    end",
+  "    ['OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS', 'OTHER_SWIFT_FLAGS', 'OTHER_LDFLAGS'].each do |key|",
+  "      next unless settings[key]",
+  "      cleaned = strip_modulemap_flags.call(settings[key])",
+  "      if cleaned.nil?",
+  "        settings.delete(key)",
   "      else",
-  "        settings[key] = strip_modulemap_flags.call(value)",
+  "        settings[key] = cleaned",
   "      end",
   "    end",
   "    ['MODULEMAP_FILE', 'CLANG_MODULEMAP_FILE'].each do |key|",
@@ -50,40 +57,23 @@ const SPM_FILELIST_GUARD = [
   "      end",
   "    end",
   "  end",
-  "  sanitize_xcconfig_line = lambda do |line|",
-  "    return (strip_modulemap_flags.call(line) || '') if line.include?('Cmlx.modulemap')",
-  "    if line =~ /^\\s*(SWIFT_ENABLE_EXPLICIT_MODULES|CLANG_ENABLE_EXPLICIT_MODULES)\\s*=/",
-  "      key = Regexp.last_match(1)",
-  "      return \"#{key} = NO\\n\"",
+  "  fix_xcfilelists = lambda do |aggregate_target|",
+  "    support_dir = aggregate_target.support_files_dir.to_s",
+  "    filelists = [",
+  "      'SPMResourcesInputFiles.xcfilelist',",
+  "      'SPMResourcesOutputFiles.xcfilelist',",
+  "      'SPMScriptsInputFiles.xcfilelist',",
+  "      'SPMScriptsOutputFiles.xcfilelist',",
+  "    ]",
+  "    filelists.each do |name|",
+  "      path = File.join(support_dir, name)",
+  "      next if File.exist?(path)",
+  "      FileUtils.mkdir_p(File.dirname(path))",
+  "      File.write(path, '')",
   "    end",
-  "    line",
   "  end",
   "  installer.aggregate_targets.each do |aggregate_target|",
-  "    support_files_dir = aggregate_target.support_files_dir",
-  "    FileUtils.mkdir_p(support_files_dir) unless File.directory?(support_files_dir)",
-  "    build_configs = if aggregate_target.respond_to?(:build_configurations)",
-  "      aggregate_target.build_configurations",
-  "    elsif aggregate_target.respond_to?(:user_targets)",
-  "      aggregate_target.user_targets.flat_map(&:build_configurations)",
-  "    else",
-  "      []",
-  "    end",
-  "    build_configs.each do |config|",
-  "      ['input', 'output'].each do |filetype|",
-  '        filelist = File.join(support_files_dir, "#{aggregate_target.name}-resources-#{config.name}-#{filetype}-files.xcfilelist")',
-  "        File.write(filelist, '') unless File.exist?(filelist)",
-  "      end",
-  "    end",
-  "    Dir.glob(File.join(support_files_dir, '*.xcconfig')).each do |xcconfig_path|",
-  "      xcconfig = File.read(xcconfig_path)",
-  "      updated = xcconfig",
-  "        .lines",
-  "        .map do |line|",
-  "          sanitize_xcconfig_line.call(line)",
-  "        end",
-  "        .join",
-  "      File.write(xcconfig_path, updated) if updated != xcconfig",
-  "    end",
+  "    fix_xcfilelists.call(aggregate_target)",
   "    if aggregate_target.respond_to?(:user_targets)",
   "      aggregate_target.user_targets.each do |user_target|",
   "        user_target.build_configurations.each do |config|",
@@ -91,66 +81,71 @@ const SPM_FILELIST_GUARD = [
   "        end",
   "      end",
   "    end",
-  "  end",
-  "  # Remove stale modulemap references that break archive builds.",
-  "  installer.pods_project.targets.each do |target|",
-  "    target.build_configurations.each do |config|",
-  "      config_ref = config.base_configuration_reference",
-  "      next unless config_ref",
-  "      xcconfig_path = config_ref.real_path",
-  "      next unless xcconfig_path && File.exist?(xcconfig_path)",
-  "      xcconfig = File.read(xcconfig_path)",
-  "      updated = xcconfig",
-  "        .lines",
-  "        .map do |line|",
-  "          sanitize_xcconfig_line.call(line)",
-  "        end",
-  "        .join",
-  "      File.write(xcconfig_path, updated) if updated != xcconfig",
+  "    Dir.glob(File.join(aggregate_target.support_files_dir, '*.xcconfig')).each do |xcconfig_path|",
+  "      next unless File.exist?(xcconfig_path)",
+  "      contents = File.read(xcconfig_path)",
+  "      next unless contents.include?('Cmlx.modulemap') || contents.include?('EXPLICIT_MODULES')",
+  "      explicit_module_keys.each do |k|",
+  '        contents = contents.gsub(/\\b#{Regexp.escape(k)}\\s*=\\s*YES\\b/, "#{k} = NO")',
+  "      end",
+  "      contents = contents.gsub(/-fmodule-map-file(?:=|\\s+)(?:\\\"|')?[^\\s\\\"']*Cmlx\\.modulemap[^\\s\\\"']*(?:\\\"|')?/, '')",
+  "      contents = contents.gsub(/ {2,}/, ' ')",
+  "      File.write(xcconfig_path, contents)",
   "    end",
+  "  end",
+  "  installer.pods_project.targets.each do |target|",
   "    target.build_configurations.each do |config|",
   "      scrub_build_settings.call(config.build_settings)",
   "    end",
-  "  end",
-  "  # Last-resort scrub: remove any lingering references directly inside the Pods project file.",
-  "  begin",
-  "    pbxproj_path = installer.pods_project.path + 'project.pbxproj'",
-  "    if File.exist?(pbxproj_path)",
-  "      pbxproj = File.read(pbxproj_path)",
-  "      updated = pbxproj",
-  "        .gsub(/-fmodule-map-file(=|\\s+)[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
-  "        .gsub(/[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
-  "      File.write(pbxproj_path, updated) if updated != pbxproj",
-  "    end",
-  "  rescue => e",
-  "    Pod::UI.warn(\"[withMLXPods] pbxproj scrub failed: #{e}\")",
   "  end",
 ].join("\n");
 
 const SPM_MODULEMAP_CLEANUP = [
+  "post_integrate do |installer|",
   "  # Ensure modulemap cleanup runs after post_integrate hooks too.",
+  "  # This is a second pass because some build settings/xcconfigs are generated after post_install.",
+  "  require 'fileutils'",
+  "  explicit_module_keys = %w[",
+  "    SWIFT_ENABLE_EXPLICIT_MODULES",
+  "    _EXPERIMENTAL_SWIFT_EXPLICIT_MODULES",
+  "    CLANG_ENABLE_EXPLICIT_MODULES",
+  "    _EXPERIMENTAL_CLANG_EXPLICIT_MODULES",
+  "    ENABLE_EXPLICIT_MODULES",
+  "  ]",
+  "  disable_explicit_modules = lambda do |settings|",
+  "    explicit_module_keys.each do |k|",
+  "      settings[k] = 'NO'",
+  "    end",
+  "  end",
   "  strip_modulemap_flags = lambda do |value|",
-  "    return value unless value.to_s.include?('Cmlx.modulemap')",
-  "    scrubbed = value.to_s",
-  "      .gsub(/-fmodule-map-file(=|\\s+)[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
-  "      .gsub(/[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
+  "    s = value.to_s",
+  "    return value unless s.include?('Cmlx.modulemap')",
+  "    scrubbed = s",
+  "      .gsub(/-fmodule-map-file(?:=|\\s+)(?:\\\"|')?[^\\s\\\"']*Cmlx\\.modulemap[^\\s\\\"']*(?:\\\"|')?/, '')",
+  "      .gsub(/\\s+/, ' ')",
   "      .strip",
   "    scrubbed.empty? ? nil : scrubbed",
   "  end",
-  "  force_disable_explicit_modules = lambda do |settings|",
-  "    settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'",
-  "    settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'",
-  "  end",
   "  scrub_build_settings = lambda do |settings|",
-  "    force_disable_explicit_modules.call(settings)",
+  "    disable_explicit_modules.call(settings)",
   "    settings.keys.each do |key|",
-  "      value = settings[key]",
-  "      next unless value.to_s.include?('Cmlx.modulemap')",
-  "      if value.is_a?(Array)",
-  "        sanitized = value.filter_map { |item| strip_modulemap_flags.call(item) }",
-  "        settings[key] = sanitized",
+  "      next unless settings[key].is_a?(String)",
+  "      if settings[key].include?('Cmlx.modulemap')",
+  "        cleaned = strip_modulemap_flags.call(settings[key])",
+  "        if cleaned.nil?",
+  "          settings.delete(key)",
+  "        else",
+  "          settings[key] = cleaned",
+  "        end",
+  "      end",
+  "    end",
+  "    ['OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS', 'OTHER_SWIFT_FLAGS', 'OTHER_LDFLAGS'].each do |key|",
+  "      next unless settings[key]",
+  "      cleaned = strip_modulemap_flags.call(settings[key])",
+  "      if cleaned.nil?",
+  "        settings.delete(key)",
   "      else",
-  "        settings[key] = strip_modulemap_flags.call(value)",
+  "        settings[key] = cleaned",
   "      end",
   "    end",
   "    ['MODULEMAP_FILE', 'CLANG_MODULEMAP_FILE'].each do |key|",
@@ -159,193 +154,140 @@ const SPM_MODULEMAP_CLEANUP = [
   "      end",
   "    end",
   "  end",
-  "  sanitize_xcconfig_line = lambda do |line|",
-  "    return (strip_modulemap_flags.call(line) || '') if line.include?('Cmlx.modulemap')",
-  "    if line =~ /^\\s*(SWIFT_ENABLE_EXPLICIT_MODULES|CLANG_ENABLE_EXPLICIT_MODULES)\\s*=/",
-  "      key = Regexp.last_match(1)",
-  "      return \"#{key} = NO\\n\"",
-  "    end",
-  "    line",
-  "  end",
   "  installer.aggregate_targets.each do |aggregate_target|",
   "    Dir.glob(File.join(aggregate_target.support_files_dir, '*.xcconfig')).each do |xcconfig_path|",
-  "      xcconfig = File.read(xcconfig_path)",
-  "      updated = xcconfig",
-  "        .lines",
-  "        .map do |line|",
-  "          sanitize_xcconfig_line.call(line)",
-  "        end",
-  "        .join",
-  "      File.write(xcconfig_path, updated) if updated != xcconfig",
-  "    end",
-  "    if aggregate_target.respond_to?(:user_targets)",
-  "      aggregate_target.user_targets.each do |user_target|",
-  "        user_target.build_configurations.each do |config|",
-  "          scrub_build_settings.call(config.build_settings)",
-  "        end",
+  "      next unless File.exist?(xcconfig_path)",
+  "      contents = File.read(xcconfig_path)",
+  "      next unless contents.include?('Cmlx.modulemap') || contents.include?('EXPLICIT_MODULES')",
+  "      explicit_module_keys.each do |k|",
+  '        contents = contents.gsub(/\\b#{Regexp.escape(k)}\\s*=\\s*YES\\b/, "#{k} = NO")',
   "      end",
+  "      contents = contents.gsub(/-fmodule-map-file(?:=|\\s+)(?:\\\"|')?[^\\s\\\"']*Cmlx\\.modulemap[^\\s\\\"']*(?:\\\"|')?/, '')",
+  "      contents = contents.gsub(/\\s+/, ' ')",
+  "      File.write(xcconfig_path, contents)",
   "    end",
   "  end",
   "  installer.pods_project.targets.each do |target|",
   "    target.build_configurations.each do |config|",
-  "      config_ref = config.base_configuration_reference",
-  "      next unless config_ref",
-  "      xcconfig_path = config_ref.real_path",
-  "      next unless xcconfig_path && File.exist?(xcconfig_path)",
-  "      xcconfig = File.read(xcconfig_path)",
-  "      updated = xcconfig",
-  "        .lines",
-  "        .map do |line|",
-  "          sanitize_xcconfig_line.call(line)",
-  "        end",
-  "        .join",
-  "      File.write(xcconfig_path, updated) if updated != xcconfig",
-  "    end",
-  "    target.build_configurations.each do |config|",
   "      scrub_build_settings.call(config.build_settings)",
   "    end",
   "  end",
-  "  # Last-resort scrub: remove any lingering references directly inside the Pods project file.",
-  "  begin",
-  "    pbxproj_path = installer.pods_project.path + 'project.pbxproj'",
-  "    if File.exist?(pbxproj_path)",
-  "      pbxproj = File.read(pbxproj_path)",
-  "      updated = pbxproj",
-  "        .gsub(/-fmodule-map-file(=|\\s+)[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
-  "        .gsub(/[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
-  "      File.write(pbxproj_path, updated) if updated != pbxproj",
-  "    end",
-  "  rescue => e",
-  "    Pod::UI.warn(\"[withMLXPods] pbxproj scrub failed: #{e}\")",
-  "  end",
+  "end",
 ].join("\n");
 
-const ensureMLXPods = (podfile) => {
-  const hasAllSpmLines = SPM_LINES.every((line) => podfile.includes(line));
-  const hasRequireBlock = podfile.includes("require 'cocoapods-spm'");
-  if (hasRequireBlock && podfile.includes(PLUGIN_LINE) && hasAllSpmLines) {
-    return ensureSpmFilelistGuard(podfile);
-  }
+function injectAfterLine(podfile, regex, injection) {
+  const match = podfile.match(regex);
+  if (!match) return podfile;
+  const idx = match.index + match[0].length;
+  return podfile.slice(0, idx) + injection + podfile.slice(idx);
+}
 
-  let updatedPodfile = podfile;
-  if (!updatedPodfile.includes("require 'cocoapods-spm'")) {
-    updatedPodfile = `${REQUIRE_BLOCK}\n${updatedPodfile}`;
-  }
-  if (!updatedPodfile.includes(PLUGIN_LINE)) {
-    const requireIndex = updatedPodfile.indexOf("require 'cocoapods-spm'");
-    if (requireIndex !== -1) {
-      const insertAt = updatedPodfile.indexOf("\n", requireIndex);
-      updatedPodfile = `${updatedPodfile.slice(0, insertAt + 1)}${PLUGIN_LINE}\n${updatedPodfile.slice(insertAt + 1)}`;
+function injectBeforeLine(podfile, regex, injection) {
+  const match = podfile.match(regex);
+  if (!match) return podfile;
+  const idx = match.index;
+  return podfile.slice(0, idx) + injection + podfile.slice(idx);
+}
+
+function ensurePostInstallBlock(podfile) {
+  if (/post_install do \|installer\|/.test(podfile)) return podfile;
+
+  // If there's already a post_integrate, we still want post_install.
+  // Add at the bottom.
+  return (
+    podfile.trimEnd() +
+    "\n\npost_install do |installer|\n" +
+    "  # Added by withMLXPods\n" +
+    "end\n"
+  );
+}
+
+function ensureMLXPods(podfile) {
+  let updated = podfile;
+
+  updated = updated.replace(/^spm_pkg.*mlx-swift.*$/gm, SPM_PKG);
+
+  // Ensure cocoapods-spm plugin line exists (near the top is fine).
+  function ensurePostInstallBlock(podfile) {
+    if (/post_install\s+do\s+\|installer\|/.test(podfile)) return podfile;
+
+
+  // Ensure the MLX SPM package declaration exists.
+  if (!updated.includes(SPM_PKG)) {
+    // Place after plugin line if possible.
+    if (updated.includes(SPM_PLUGIN)) {
+      updated = updated.replace(SPM_PLUGIN, `${SPM_PLUGIN}\n${SPM_PKG}`);
     } else {
-      updatedPodfile = `${PLUGIN_LINE}\n${updatedPodfile}`;
+      updated = `${SPM_PKG}\n${updated}`;
     }
   }
 
-  const podsBlock = `if defined?(spm_pkg)\n${SPM_LINES.join("\n")}\nend`;
-  const hasSpmBlockAlready =
-    SPM_LINES.some((line) => updatedPodfile.includes(line)) ||
-    updatedPodfile.includes('spm_pkg "mlx-swift"');
+  updated = ensurePostInstallBlock(updated);
 
-  if (!hasSpmBlockAlready && updatedPodfile.includes("use_expo_modules!")) {
-    const updatedWithPods = updatedPodfile.replace(
-      "use_expo_modules!",
-      `use_expo_modules!\n${podsBlock}`,
+  // Add filelist guard + modulemap scrub inside post_install.
+  if (!updated.includes("fix_xcfilelists = lambda")) {
+    updated = injectAfterLine(
+      updated,
+      /post_install do \|installer\|\n/,
+      `${SPM_FILELIST_GUARD}\n`,
     );
-    return ensureSpmFilelistGuard(updatedWithPods);
   }
 
-  if (!hasSpmBlockAlready && updatedPodfile.includes("use_react_native!")) {
-    const updatedWithPods = updatedPodfile.replace(
-      "use_react_native!",
-      `use_react_native!\n${podsBlock}`,
-    );
-    return ensureSpmFilelistGuard(updatedWithPods);
+  // Add post_integrate cleanup (second pass).
+  if (!updated.includes("post_integrate do |installer|")) {
+    // Append at end of file.
+    updated = `${updated.trimEnd()}\n\n${SPM_MODULEMAP_CLEANUP}\n`;
   }
 
-  const updatedWithPods = updatedPodfile.replace(
-    /target ['"].+?['"] do/,
-    (match) => {
-      return `${match}\n${podsBlock}`;
-    },
-  );
+  return updated;
+}
 
-  return ensureSpmFilelistGuard(updatedWithPods);
-};
+const EXPLICIT_MODULE_KEYS = [
+  "SWIFT_ENABLE_EXPLICIT_MODULES",
+  "_EXPERIMENTAL_SWIFT_EXPLICIT_MODULES",
+  "CLANG_ENABLE_EXPLICIT_MODULES",
+  "_EXPERIMENTAL_CLANG_EXPLICIT_MODULES",
+  "ENABLE_EXPLICIT_MODULES",
+];
 
-const ensureSpmFilelistGuard = (podfile) => {
-  if (podfile.includes("cocoapods-spm expecting resource xcfilelist")) {
-    return podfile;
-  }
-
-  const injectBeforeBlockEnd = (contents, blockName, rubyLines) => {
-    const startNeedle = `${blockName} do |installer|`;
-    const lines = contents.split(/\r?\n/);
-    const startIndex = lines.findIndex((line) => line.includes(startNeedle));
-    if (startIndex === -1) return null;
-
-    const stripComments = (line) => line.replace(/#.*$/, "");
-    const countToken = (line, token) => {
-      const matches = stripComments(line).match(
-        new RegExp(`\\b${token}\\b`, "g"),
-      );
-      return matches ? matches.length : 0;
-    };
-
-    let depth = 1;
-    for (let i = startIndex + 1; i < lines.length; i += 1) {
-      const line = lines[i];
-      depth += countToken(line, "do");
-      depth -= countToken(line, "end");
-
-      if (depth === 0) {
-        lines.splice(i, 0, ...rubyLines.split("\n"));
-        return lines.join("\n");
-      }
-    }
-
-    return null;
-  };
-
-  let updatedPodfile = podfile;
-
-  const postInstallInjected = injectBeforeBlockEnd(
-    updatedPodfile,
-    "post_install",
-    SPM_FILELIST_GUARD,
-  );
-  if (postInstallInjected) {
-    updatedPodfile = postInstallInjected;
-  } else {
-    // No post_install block: create one and run our guard at the end.
-    updatedPodfile = `${updatedPodfile}\n\npost_install do |installer|\n${SPM_FILELIST_GUARD}\nend\n`;
-  }
-
-  const postIntegrateInjected = injectBeforeBlockEnd(
-    updatedPodfile,
-    "post_integrate",
-    SPM_MODULEMAP_CLEANUP,
-  );
-  if (postIntegrateInjected) {
-    return postIntegrateInjected;
-  }
-
-  return `${updatedPodfile}\n\npost_integrate do |installer|\n${SPM_MODULEMAP_CLEANUP}\nend\n`;
+const withExplicitModulesDisabledInXcodeProject = (config) => {
+  return withXcodeProject(config, (config) => {
+    const project = config.modResults;
+    const configs = project.pbxXCBuildConfigurationSection();
+    Object.keys(configs).forEach((key) => {
+      const cfg = configs[key];
+      if (!cfg || cfg.isa !== "XCBuildConfiguration") return;
+      cfg.buildSettings = cfg.buildSettings || {};
+      EXPLICIT_MODULE_KEYS.forEach((k) => {
+        cfg.buildSettings[k] = "NO";
+      });
+    });
+    return config;
+  });
 };
 
 const withMLXPods = (config) => {
-  return withPodfile(config, (config) => {
+  const withPodfilePatched = withPodfile(config, (config) => {
     const podfile = config.modResults.contents;
     const updated = ensureMLXPods(podfile);
 
     if (updated !== podfile) {
       config.modResults.contents = updated;
-      console.log("[withMLXPods] Added MLX pods to Podfile");
+      console.log(
+        "[withMLXPods] Added/updated MLX SPM + modulemap guards in Podfile",
+      );
     } else {
-      console.log("[withMLXPods] MLX pods already present");
+      console.log(
+        "[withMLXPods] Podfile already contains MLX SPM + modulemap guards",
+      );
     }
 
     return config;
   });
+
+  // Extra belt-and-suspenders: disable explicit modules in the user Xcode project too.
+  // (Pods are handled via post_install/post_integrate in the Podfile.)
+  return withExplicitModulesDisabledInXcodeProject(withPodfilePatched);
 };
 
 module.exports = withMLXPods;

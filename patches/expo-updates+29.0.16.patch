@@ -1,0 +1,965 @@
+diff --git a/node_modules/expo-updates/CHANGELOG.md b/node_modules/expo-updates/CHANGELOG.md
+index 8689be9..d094cd8 100644
+--- a/node_modules/expo-updates/CHANGELOG.md
++++ b/node_modules/expo-updates/CHANGELOG.md
+@@ -10,12 +10,6 @@
+ 
+ ### 💡 Others
+ 
+-## 29.0.16 — 2026-01-06
+-
+-### 💡 Others
+-
+-- Bump to `@expo/code-signing-certificates@^0.0.6` ([#41965](https://github.com/expo/expo/pull/41965) by [@kitten](https://github.com/kitten))
+-
+ ## 29.0.15 — 2025-12-08
+ 
+ _This version does not introduce any user-facing changes._
+diff --git a/node_modules/expo-updates/android/build.gradle b/node_modules/expo-updates/android/build.gradle
+index 0994c5f..767a88a 100644
+--- a/node_modules/expo-updates/android/build.gradle
++++ b/node_modules/expo-updates/android/build.gradle
+@@ -42,7 +42,7 @@ expoModule {
+ }
+ 
+ group = 'host.exp.exponent'
+-version = '29.0.16'
++version = '29.0.15'
+ 
+ // Utility method to derive boolean values from the environment or from Java properties,
+ // and return them as strings to be used in BuildConfig fields
+@@ -88,7 +88,7 @@ android {
+   namespace "expo.modules.updates"
+   defaultConfig {
+     versionCode 31
+-    versionName '29.0.16'
++    versionName '29.0.15'
+     consumerProguardFiles("proguard-rules.pro")
+     testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+ 
+diff --git a/node_modules/expo-updates/build-cli/assetsVerify.d.ts b/node_modules/expo-updates/build-cli/assetsVerify.d.ts
+new file mode 100644
+index 0000000..ad5e5fe
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/assetsVerify.d.ts
+@@ -0,0 +1,3 @@
++#!/usr/bin/env node
++import { Command } from './cli';
++export declare const expoAssetsVerify: Command;
+diff --git a/node_modules/expo-updates/build-cli/assetsVerify.js b/node_modules/expo-updates/build-cli/assetsVerify.js
+new file mode 100644
+index 0000000..f0ee62a
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/assetsVerify.js
+@@ -0,0 +1,88 @@
++#!/usr/bin/env node
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.expoAssetsVerify = void 0;
++const tslib_1 = require("tslib");
++const chalk_1 = tslib_1.__importDefault(require("chalk"));
++const path_1 = tslib_1.__importDefault(require("path"));
++const assetsVerifyAsync_1 = require("./assetsVerifyAsync");
++const assetsVerifyTypes_1 = require("./assetsVerifyTypes");
++const args_1 = require("./utils/args");
++const Log = tslib_1.__importStar(require("./utils/log"));
++const debug = require('debug')('expo-updates:assets:verify');
++const expoAssetsVerify = async (argv) => {
++    const args = (0, args_1.assertArgs)({
++        // Types
++        '--asset-map-path': String,
++        '--exported-manifest-path': String,
++        '--build-manifest-path': String,
++        '--platform': String,
++        '--help': Boolean,
++        // Aliases
++        '-a': '--asset-map-path',
++        '-e': '--exported-manifest-path',
++        '-b': '--build-manifest-path',
++        '-p': '--platform',
++        '-h': '--help',
++    }, argv !== null && argv !== void 0 ? argv : []);
++    if (args['--help']) {
++        Log.exit((0, chalk_1.default) `
++{bold Description}
++Verify that all static files in an exported bundle are in either the export or an embedded bundle
++
++{bold Usage}
++  {dim $} npx expo-updates assets:verify {dim <dir>}
++
++  Options
++  <dir>                                  Directory of the Expo project. Default: Current working directory
++  -a, --asset-map-path <path>            Path to the \`assetmap.json\` in an export produced by the command \`npx expo export --dump-assetmap\`
++  -e, --exported-manifest-path <path>    Path to the \`metadata.json\` in an export produced by the command \`npx expo export --dump-assetmap\`
++  -b, --build-manifest-path <path>       Path to the \`app.manifest\` file created by expo-updates in an Expo application build (either ios or android)
++  -p, --platform <platform>              Options: ${JSON.stringify(assetsVerifyTypes_1.validPlatforms)}
++  -h, --help                             Usage info
++  `, 0);
++    }
++    return (async () => {
++        const projectRoot = (0, args_1.getProjectRoot)(args);
++        const validatedArgs = resolveOptions(projectRoot, args);
++        debug(`Validated params: ${JSON.stringify(validatedArgs, null, 2)}`);
++        const { buildManifestPath, exportedManifestPath, assetMapPath, platform } = validatedArgs;
++        const missingAssets = await (0, assetsVerifyAsync_1.getMissingAssetsAsync)(buildManifestPath, exportedManifestPath, assetMapPath, platform);
++        if (missingAssets.length > 0) {
++            throw new Error(`${missingAssets.length} assets not found in either embedded manifest or in exported bundle:${JSON.stringify(missingAssets, null, 2)}`);
++        }
++        else {
++            Log.log(`All resolved assets found in either embedded manifest or in exported bundle.`);
++        }
++        process.exit(0);
++    })().catch((e) => {
++        Log.log(`${e}`);
++        process.exit(1);
++    });
++};
++exports.expoAssetsVerify = expoAssetsVerify;
++function resolveOptions(projectRoot, args) {
++    const exportedManifestPath = validatedPathFromArgument(projectRoot, args, '--exported-manifest-path');
++    const buildManifestPath = validatedPathFromArgument(projectRoot, args, '--build-manifest-path');
++    const assetMapPath = validatedPathFromArgument(projectRoot, args, '--asset-map-path');
++    const platform = args['--platform'];
++    if (!(0, assetsVerifyTypes_1.isValidPlatform)(platform)) {
++        throw new Error(`Platform must be one of ${JSON.stringify(assetsVerifyTypes_1.validPlatforms)}`);
++    }
++    return {
++        exportedManifestPath,
++        buildManifestPath,
++        assetMapPath,
++        platform,
++    };
++}
++function validatedPathFromArgument(projectRoot, args, key) {
++    const maybeRelativePath = args[key];
++    if (!maybeRelativePath) {
++        throw new Error(`No value for ${key}`);
++    }
++    if (maybeRelativePath.indexOf('/') === 0) {
++        return maybeRelativePath; // absolute path
++    }
++    return path_1.default.resolve(projectRoot, maybeRelativePath);
++}
+diff --git a/node_modules/expo-updates/build-cli/assetsVerifyAsync.d.ts b/node_modules/expo-updates/build-cli/assetsVerifyAsync.d.ts
+new file mode 100644
+index 0000000..21ee7b6
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/assetsVerifyAsync.d.ts
+@@ -0,0 +1,59 @@
++import { BuildManifest, ExportedMetadata, FullAssetDump, FullAssetDumpEntry, MissingAsset, Platform } from './assetsVerifyTypes';
++/**
++ * Finds any assets that will be missing from an app given a build and an exported update bundle.
++ *
++ * @param buildManifestPath Path to the `app.manifest` file created by expo-updates in an Expo application build (either ios or android)
++ * @param exportMetadataPath Path to the `metadata.json` in an export produced by the command `npx expo export --dump-assetmap`
++ * @param assetMapPath Path to the `assetmap.json` in an export produced by the command `npx expo export --dump-assetmap`
++ * @param projectRoot The project root path
++ * @returns An array containing any assets that are found in the Metro asset dump, but not included in either app.manifest or the exported bundle
++ */
++export declare function getMissingAssetsAsync(buildManifestPath: string, exportMetadataPath: string, assetMapPath: string, platform: Platform): Promise<MissingAsset[]>;
++/**
++ * Reads and returns the embedded manifest (app.manifest) for a build.
++ *
++ * @param buildManifestPath Path to the build folder
++ * @param platform Either 'android' or 'ios'
++ * @param projectRoot The project root path
++ * @returns the JSON structure of the manifest
++ */
++export declare function getBuildManifestAsync(buildManifestPath: string): Promise<BuildManifest>;
++/**
++ * Extracts the set of asset hashes from a build manifest.
++ *
++ * @param buildManifest The build manifest
++ * @returns The set of asset hashes contained in the build manifest
++ */
++export declare function getBuildManifestHashSet(buildManifest: BuildManifest): Set<string>;
++/**
++ * Reads and extracts the asset dump for an exported bundle.
++ *
++ * @param assetMapPath The path to the exported assetmap.json.
++ * @returns The asset dump as an object.
++ */
++export declare function getFullAssetDumpAsync(assetMapPath: string): Promise<FullAssetDump>;
++/**
++ * Extracts the set of asset hashes from an asset dump.
++ *
++ * @param assetDump
++ * @returns The set of asset hashes in the asset dump, and a map of hash to asset
++ */
++export declare function getFullAssetDumpHashSet(assetDump: FullAssetDump): {
++    fullAssetHashSet: Set<string>;
++    fullAssetHashMap: Map<string, FullAssetDumpEntry>;
++};
++/**
++ * Reads and extracts the metadata.json from an exported bundle.
++ *
++ * @param exportedMetadataPath Path to the exported metadata.json.
++ * @returns The metadata of the bundle.
++ */
++export declare function getExportedMetadataAsync(exportedMetadataPath: string): Promise<ExportedMetadata>;
++/**
++ * Extracts the set of asset hashes from an exported bundle's metadata for a given platform.
++ *
++ * @param metadata The metadata from the exported bundle
++ * @param platform Either 'android' or 'ios'
++ * @returns the set of asset hashes
++ */
++export declare function getExportedMetadataHashSet(metadata: ExportedMetadata, platform: Platform): Set<string>;
+diff --git a/node_modules/expo-updates/build-cli/assetsVerifyAsync.js b/node_modules/expo-updates/build-cli/assetsVerifyAsync.js
+new file mode 100644
+index 0000000..6b19601
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/assetsVerifyAsync.js
+@@ -0,0 +1,127 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.getExportedMetadataHashSet = exports.getExportedMetadataAsync = exports.getFullAssetDumpHashSet = exports.getFullAssetDumpAsync = exports.getBuildManifestHashSet = exports.getBuildManifestAsync = exports.getMissingAssetsAsync = void 0;
++const fs_1 = require("fs");
++const debug = require('debug')('expo-updates:assets:verify');
++/**
++ * Finds any assets that will be missing from an app given a build and an exported update bundle.
++ *
++ * @param buildManifestPath Path to the `app.manifest` file created by expo-updates in an Expo application build (either ios or android)
++ * @param exportMetadataPath Path to the `metadata.json` in an export produced by the command `npx expo export --dump-assetmap`
++ * @param assetMapPath Path to the `assetmap.json` in an export produced by the command `npx expo export --dump-assetmap`
++ * @param projectRoot The project root path
++ * @returns An array containing any assets that are found in the Metro asset dump, but not included in either app.manifest or the exported bundle
++ */
++async function getMissingAssetsAsync(buildManifestPath, exportMetadataPath, assetMapPath, platform) {
++    const buildManifestHashSet = getBuildManifestHashSet(await getBuildManifestAsync(buildManifestPath));
++    const fullAssetDump = await getFullAssetDumpAsync(assetMapPath);
++    const { fullAssetHashSet, fullAssetHashMap } = getFullAssetDumpHashSet(fullAssetDump);
++    const exportedAssetSet = getExportedMetadataHashSet(await getExportedMetadataAsync(exportMetadataPath), platform);
++    debug(`Assets in build: ${JSON.stringify([...buildManifestHashSet], null, 2)}`);
++    debug(`Assets in exported bundle: ${JSON.stringify([...exportedAssetSet], null, 2)}`);
++    debug(`All assets resolved by Metro: ${JSON.stringify([...fullAssetHashSet], null, 2)}`);
++    const buildAssetsPlusExportedAssets = new Set(buildManifestHashSet);
++    exportedAssetSet.forEach((hash) => buildAssetsPlusExportedAssets.add(hash));
++    const missingAssets = [];
++    fullAssetHashSet.forEach((hash) => {
++        if (!buildAssetsPlusExportedAssets.has(hash)) {
++            const asset = fullAssetHashMap.get(hash);
++            asset === null || asset === void 0 ? void 0 : asset.fileHashes.forEach((fileHash, index) => {
++                if ((asset === null || asset === void 0 ? void 0 : asset.fileHashes[index]) === hash) {
++                    missingAssets.push({
++                        hash,
++                        path: asset === null || asset === void 0 ? void 0 : asset.files[index],
++                    });
++                }
++            });
++        }
++    });
++    return missingAssets;
++}
++exports.getMissingAssetsAsync = getMissingAssetsAsync;
++/**
++ * Reads and returns the embedded manifest (app.manifest) for a build.
++ *
++ * @param buildManifestPath Path to the build folder
++ * @param platform Either 'android' or 'ios'
++ * @param projectRoot The project root path
++ * @returns the JSON structure of the manifest
++ */
++async function getBuildManifestAsync(buildManifestPath) {
++    const buildManifestString = await fs_1.promises.readFile(buildManifestPath, { encoding: 'utf-8' });
++    const buildManifest = JSON.parse(buildManifestString);
++    return buildManifest;
++}
++exports.getBuildManifestAsync = getBuildManifestAsync;
++/**
++ * Extracts the set of asset hashes from a build manifest.
++ *
++ * @param buildManifest The build manifest
++ * @returns The set of asset hashes contained in the build manifest
++ */
++function getBuildManifestHashSet(buildManifest) {
++    var _a;
++    return new Set(((_a = buildManifest.assets) !== null && _a !== void 0 ? _a : []).map((asset) => asset.packagerHash));
++}
++exports.getBuildManifestHashSet = getBuildManifestHashSet;
++/**
++ * Reads and extracts the asset dump for an exported bundle.
++ *
++ * @param assetMapPath The path to the exported assetmap.json.
++ * @returns The asset dump as an object.
++ */
++async function getFullAssetDumpAsync(assetMapPath) {
++    const assetMapString = await fs_1.promises.readFile(assetMapPath, { encoding: 'utf-8' });
++    const assetMap = new Map(Object.entries(JSON.parse(assetMapString)));
++    return assetMap;
++}
++exports.getFullAssetDumpAsync = getFullAssetDumpAsync;
++/**
++ * Extracts the set of asset hashes from an asset dump.
++ *
++ * @param assetDump
++ * @returns The set of asset hashes in the asset dump, and a map of hash to asset
++ */
++function getFullAssetDumpHashSet(assetDump) {
++    const fullAssetHashSet = new Set();
++    const fullAssetHashMap = new Map();
++    assetDump.forEach((asset) => asset.fileHashes.forEach((hash) => {
++        fullAssetHashSet.add(hash);
++        fullAssetHashMap.set(hash, asset);
++    }));
++    return {
++        fullAssetHashSet,
++        fullAssetHashMap,
++    };
++}
++exports.getFullAssetDumpHashSet = getFullAssetDumpHashSet;
++/**
++ * Reads and extracts the metadata.json from an exported bundle.
++ *
++ * @param exportedMetadataPath Path to the exported metadata.json.
++ * @returns The metadata of the bundle.
++ */
++async function getExportedMetadataAsync(exportedMetadataPath) {
++    const metadataString = await fs_1.promises.readFile(exportedMetadataPath, { encoding: 'utf-8' });
++    const metadata = JSON.parse(metadataString);
++    return metadata;
++}
++exports.getExportedMetadataAsync = getExportedMetadataAsync;
++/**
++ * Extracts the set of asset hashes from an exported bundle's metadata for a given platform.
++ *
++ * @param metadata The metadata from the exported bundle
++ * @param platform Either 'android' or 'ios'
++ * @returns the set of asset hashes
++ */
++function getExportedMetadataHashSet(metadata, platform) {
++    var _a;
++    const fileMetadata = platform === 'android' ? metadata.fileMetadata.android : metadata.fileMetadata.ios;
++    if (!fileMetadata) {
++        throw new Error(`Exported bundle was not exported for platform ${platform}`);
++    }
++    const assets = (_a = fileMetadata === null || fileMetadata === void 0 ? void 0 : fileMetadata.assets) !== null && _a !== void 0 ? _a : [];
++    // Asset paths in the export metadata are of the form 'assets/<hash string>'
++    return new Set(assets.map((asset) => asset.path.substring(7, asset.path.length)));
++}
++exports.getExportedMetadataHashSet = getExportedMetadataHashSet;
+diff --git a/node_modules/expo-updates/build-cli/assetsVerifyTypes.d.ts b/node_modules/expo-updates/build-cli/assetsVerifyTypes.d.ts
+new file mode 100644
+index 0000000..3b66c77
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/assetsVerifyTypes.d.ts
+@@ -0,0 +1,45 @@
++export declare const validPlatforms: string[];
++export type Platform = (typeof validPlatforms)[number];
++export declare const isValidPlatform: (p: any) => boolean;
++export interface ValidatedOptions {
++    exportedManifestPath: string;
++    buildManifestPath: string;
++    assetMapPath: string;
++    platform: Platform;
++}
++export type FullAssetDumpEntry = {
++    files: string[];
++    hash: string;
++    name: string;
++    type: string;
++    fileHashes: string[];
++};
++export type FullAssetDump = Map<string, FullAssetDumpEntry>;
++export type BuildManifestAsset = {
++    name: string;
++    type: string;
++    packagerHash: string;
++};
++export type BuildManifest = {
++    assets: BuildManifestAsset[];
++} & {
++    [key: string]: any;
++};
++export type ExportedMetadataAsset = {
++    path: string;
++    ext: string;
++};
++export type FileMetadata = {
++    bundle: string;
++    assets: ExportedMetadataAsset[];
++};
++export type ExportedMetadata = {
++    fileMetadata: {
++        ios?: FileMetadata;
++        android?: FileMetadata;
++    };
++};
++export type MissingAsset = {
++    hash: string;
++    path: string;
++};
+diff --git a/node_modules/expo-updates/build-cli/assetsVerifyTypes.js b/node_modules/expo-updates/build-cli/assetsVerifyTypes.js
+new file mode 100644
+index 0000000..6bcdf28
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/assetsVerifyTypes.js
+@@ -0,0 +1,7 @@
++"use strict";
++// Types for the options passed into the command
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.isValidPlatform = exports.validPlatforms = void 0;
++exports.validPlatforms = ['android', 'ios'];
++const isValidPlatform = (p) => exports.validPlatforms.includes(p);
++exports.isValidPlatform = isValidPlatform;
+diff --git a/node_modules/expo-updates/build-cli/cli.d.ts b/node_modules/expo-updates/build-cli/cli.d.ts
+new file mode 100644
+index 0000000..abad934
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/cli.d.ts
+@@ -0,0 +1,2 @@
++#!/usr/bin/env node
++export type Command = (argv?: string[]) => void;
+diff --git a/node_modules/expo-updates/build-cli/cli.js b/node_modules/expo-updates/build-cli/cli.js
+new file mode 100644
+index 0000000..d5faaeb
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/cli.js
+@@ -0,0 +1,56 @@
++#!/usr/bin/env node
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++const tslib_1 = require("tslib");
++const arg_1 = tslib_1.__importDefault(require("arg"));
++const chalk_1 = tslib_1.__importDefault(require("chalk"));
++const debug_1 = tslib_1.__importDefault(require("debug"));
++const getenv_1 = require("getenv");
++const Log = tslib_1.__importStar(require("./utils/log"));
++// Setup before requiring `debug`.
++if ((0, getenv_1.boolish)('EXPO_DEBUG', false)) {
++    debug_1.default.enable('expo-updates:*');
++}
++else if (debug_1.default.enabled('expo-updates:')) {
++    process.env.EXPO_DEBUG = '1';
++}
++const commands = {
++    // Add a new command here
++    'codesigning:generate': () => import('./generateCodeSigning.js').then((i) => i.generateCodeSigning),
++    'codesigning:configure': () => import('./configureCodeSigning.js').then((i) => i.configureCodeSigning),
++    'assets:verify': () => import('./assetsVerify.js').then((i) => i.expoAssetsVerify),
++};
++const args = (0, arg_1.default)({
++    // Types
++    '--help': Boolean,
++    // Aliases
++    '-h': '--help',
++}, {
++    permissive: true,
++});
++const command = args._[0];
++const commandArgs = args._.slice(1);
++// Handle `--help` flag
++if ((args['--help'] && !command) || !command) {
++    Log.exit((0, chalk_1.default) `
++{bold Usage}
++  {dim $} npx expo-updates <command>
++
++{bold Commands}
++  ${Object.keys(commands).sort().join(', ')}
++
++{bold Options}
++  --help, -h      Displays this message
++
++For more information run a command with the --help flag
++  {dim $} npx expo-updates codesigning:generate --help
++  `, 0);
++}
++// Push the help flag to the subcommand args.
++if (args['--help']) {
++    commandArgs.push('--help');
++}
++// Install exit hooks
++process.on('SIGINT', () => process.exit(0));
++process.on('SIGTERM', () => process.exit(0));
++commands[command]().then((exec) => exec(commandArgs));
+diff --git a/node_modules/expo-updates/build-cli/configureCodeSigning.d.ts b/node_modules/expo-updates/build-cli/configureCodeSigning.d.ts
+new file mode 100644
+index 0000000..513ef6e
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/configureCodeSigning.d.ts
+@@ -0,0 +1,3 @@
++#!/usr/bin/env node
++import { Command } from './cli';
++export declare const configureCodeSigning: Command;
+diff --git a/node_modules/expo-updates/build-cli/configureCodeSigning.js b/node_modules/expo-updates/build-cli/configureCodeSigning.js
+new file mode 100644
+index 0000000..9eec215
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/configureCodeSigning.js
+@@ -0,0 +1,43 @@
++#!/usr/bin/env node
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.configureCodeSigning = void 0;
++const tslib_1 = require("tslib");
++const chalk_1 = tslib_1.__importDefault(require("chalk"));
++const args_1 = require("./utils/args");
++const Log = tslib_1.__importStar(require("./utils/log"));
++const configureCodeSigning = async (argv) => {
++    const args = (0, args_1.assertArgs)({
++        // Types
++        '--help': Boolean,
++        '--certificate-input-directory': String,
++        '--key-input-directory': String,
++        '--keyid': String,
++        // Aliases
++        '-h': '--help',
++    }, argv !== null && argv !== void 0 ? argv : []);
++    if (args['--help']) {
++        Log.exit((0, chalk_1.default) `
++{bold Description}
++Configure expo-updates code signing for this project and verify setup
++
++{bold Usage}
++  {dim $} npx expo-updates codesigning:configure --certificate-input-directory <dir> --key-input-directory <dir>
++
++  Options
++  --certificate-input-directory <string>     Directory containing code signing certificate
++  --key-input-directory <string>             Directory containing private and public keys
++  -h, --help                                 Output usage information
++    `, 0);
++    }
++    const { configureCodeSigningAsync } = await import('./configureCodeSigningAsync.js');
++    const certificateInput = (0, args_1.requireArg)(args, '--certificate-input-directory');
++    const keyInput = (0, args_1.requireArg)(args, '--key-input-directory');
++    const keyid = args['--keyid'];
++    return await configureCodeSigningAsync((0, args_1.getProjectRoot)(args), {
++        certificateInput,
++        keyInput,
++        keyid,
++    });
++};
++exports.configureCodeSigning = configureCodeSigning;
+diff --git a/node_modules/expo-updates/build-cli/configureCodeSigningAsync.d.ts b/node_modules/expo-updates/build-cli/configureCodeSigningAsync.d.ts
+new file mode 100644
+index 0000000..8f3fc40
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/configureCodeSigningAsync.d.ts
+@@ -0,0 +1,7 @@
++type Options = {
++    certificateInput: string;
++    keyInput: string;
++    keyid: string | undefined;
++};
++export declare function configureCodeSigningAsync(projectRoot: string, { certificateInput, keyInput, keyid }: Options): Promise<void>;
++export {};
+diff --git a/node_modules/expo-updates/build-cli/configureCodeSigningAsync.js b/node_modules/expo-updates/build-cli/configureCodeSigningAsync.js
+new file mode 100644
+index 0000000..77269ae
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/configureCodeSigningAsync.js
+@@ -0,0 +1,42 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.configureCodeSigningAsync = void 0;
++const tslib_1 = require("tslib");
++const code_signing_certificates_1 = require("@expo/code-signing-certificates");
++const config_1 = require("@expo/config");
++const fs_1 = require("fs");
++const path_1 = tslib_1.__importDefault(require("path"));
++const log_1 = require("./utils/log");
++const modifyConfigAsync_1 = require("./utils/modifyConfigAsync");
++async function configureCodeSigningAsync(projectRoot, { certificateInput, keyInput, keyid }) {
++    const certificateInputDir = path_1.default.resolve(projectRoot, certificateInput);
++    const keyInputDir = path_1.default.resolve(projectRoot, keyInput);
++    const [certificatePEM, privateKeyPEM, publicKeyPEM] = await Promise.all([
++        fs_1.promises.readFile(path_1.default.join(certificateInputDir, 'certificate.pem'), 'utf8'),
++        fs_1.promises.readFile(path_1.default.join(keyInputDir, 'private-key.pem'), 'utf8'),
++        fs_1.promises.readFile(path_1.default.join(keyInputDir, 'public-key.pem'), 'utf8'),
++    ]);
++    const certificate = (0, code_signing_certificates_1.convertCertificatePEMToCertificate)(certificatePEM);
++    const keyPair = (0, code_signing_certificates_1.convertKeyPairPEMToKeyPair)({ privateKeyPEM, publicKeyPEM });
++    (0, code_signing_certificates_1.validateSelfSignedCertificate)(certificate, keyPair);
++    const { exp } = (0, config_1.getConfig)(projectRoot, { skipSDKVersionRequirement: true });
++    const fields = {
++        codeSigningCertificate: `./${path_1.default.relative(projectRoot, certificateInputDir)}/certificate.pem`,
++        codeSigningMetadata: {
++            keyid: keyid !== null && keyid !== void 0 ? keyid : 'main',
++            alg: 'rsa-v1_5-sha256',
++        },
++    };
++    await (0, modifyConfigAsync_1.attemptModification)(projectRoot, {
++        updates: {
++            ...exp.updates,
++            ...fields,
++        },
++    }, {
++        updates: {
++            ...fields,
++        },
++    });
++    (0, log_1.log)(`Code signing configuration written to app configuration.`);
++}
++exports.configureCodeSigningAsync = configureCodeSigningAsync;
+diff --git a/node_modules/expo-updates/build-cli/generateCodeSigning.d.ts b/node_modules/expo-updates/build-cli/generateCodeSigning.d.ts
+new file mode 100644
+index 0000000..edf1376
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/generateCodeSigning.d.ts
+@@ -0,0 +1,3 @@
++#!/usr/bin/env node
++import { Command } from './cli';
++export declare const generateCodeSigning: Command;
+diff --git a/node_modules/expo-updates/build-cli/generateCodeSigning.js b/node_modules/expo-updates/build-cli/generateCodeSigning.js
+new file mode 100644
+index 0000000..f9f8036
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/generateCodeSigning.js
+@@ -0,0 +1,48 @@
++#!/usr/bin/env node
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.generateCodeSigning = void 0;
++const tslib_1 = require("tslib");
++const chalk_1 = tslib_1.__importDefault(require("chalk"));
++const args_1 = require("./utils/args");
++const Log = tslib_1.__importStar(require("./utils/log"));
++const generateCodeSigning = async (argv) => {
++    const args = (0, args_1.assertArgs)({
++        // Types
++        '--help': Boolean,
++        '--key-output-directory': String,
++        '--certificate-output-directory': String,
++        '--certificate-validity-duration-years': Number,
++        '--certificate-common-name': String,
++        // Aliases
++        '-h': '--help',
++    }, argv !== null && argv !== void 0 ? argv : []);
++    if (args['--help']) {
++        Log.exit((0, chalk_1.default) `
++{bold Description}
++Generate expo-updates private key, public key, and code signing certificate using that public key (self-signed by the private key)
++
++{bold Usage}
++  {dim $} npx expo-updates codesigning:generate --key-output-directory <dir> --certificate-output-directory <dir> --certificate-validity-duration-years <num years> --certificate-common-name <name>
++
++  Options
++  --key-output-directory <string>                  Directory in which to put the generated private and public keys
++  --certificate-output-directory <string>          Directory in which to put the generated certificate
++  --certificate-validity-duration-years <number>   Certificate validity duration in years (number of years before certificate needs rotation)
++  --certificate-common-name <string>               Common name attribute for certificate (generally the human readable name of the organization owning this application)
++  -h, --help                                       Output usage information
++    `, 0);
++    }
++    const { generateCodeSigningAsync } = await import('./generateCodeSigningAsync.js');
++    const keyOutput = (0, args_1.requireArg)(args, '--key-output-directory');
++    const certificateOutput = (0, args_1.requireArg)(args, '--certificate-output-directory');
++    const certificateValidityDurationYears = (0, args_1.requireArg)(args, '--certificate-validity-duration-years');
++    const certificateCommonName = (0, args_1.requireArg)(args, '--certificate-common-name');
++    return await generateCodeSigningAsync((0, args_1.getProjectRoot)(args), {
++        certificateValidityDurationYears,
++        keyOutput,
++        certificateOutput,
++        certificateCommonName,
++    });
++};
++exports.generateCodeSigning = generateCodeSigning;
+diff --git a/node_modules/expo-updates/build-cli/generateCodeSigningAsync.d.ts b/node_modules/expo-updates/build-cli/generateCodeSigningAsync.d.ts
+new file mode 100644
+index 0000000..0e9734f
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/generateCodeSigningAsync.d.ts
+@@ -0,0 +1,8 @@
++type Options = {
++    certificateValidityDurationYears: number;
++    keyOutput: string;
++    certificateOutput: string;
++    certificateCommonName: string;
++};
++export declare function generateCodeSigningAsync(projectRoot: string, { certificateValidityDurationYears, keyOutput, certificateOutput, certificateCommonName }: Options): Promise<void>;
++export {};
+diff --git a/node_modules/expo-updates/build-cli/generateCodeSigningAsync.js b/node_modules/expo-updates/build-cli/generateCodeSigningAsync.js
+new file mode 100644
+index 0000000..02eea9d
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/generateCodeSigningAsync.js
+@@ -0,0 +1,43 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.generateCodeSigningAsync = void 0;
++const tslib_1 = require("tslib");
++const code_signing_certificates_1 = require("@expo/code-signing-certificates");
++const assert_1 = tslib_1.__importDefault(require("assert"));
++const fs_1 = require("fs");
++const path_1 = tslib_1.__importDefault(require("path"));
++const dir_1 = require("./utils/dir");
++const log_1 = require("./utils/log");
++async function generateCodeSigningAsync(projectRoot, { certificateValidityDurationYears, keyOutput, certificateOutput, certificateCommonName }) {
++    const validityDurationYears = Math.floor(certificateValidityDurationYears);
++    const certificateOutputDir = path_1.default.resolve(projectRoot, certificateOutput);
++    const keyOutputDir = path_1.default.resolve(projectRoot, keyOutput);
++    await Promise.all([(0, dir_1.ensureDirAsync)(certificateOutputDir), (0, dir_1.ensureDirAsync)(keyOutputDir)]);
++    const [certificateOutputDirContents, keyOutputDirContents] = await Promise.all([
++        fs_1.promises.readdir(certificateOutputDir),
++        fs_1.promises.readdir(keyOutputDir),
++    ]);
++    (0, assert_1.default)(certificateOutputDirContents.length === 0, 'Certificate output directory must be empty');
++    (0, assert_1.default)(keyOutputDirContents.length === 0, 'Key output directory must be empty');
++    const keyPair = (0, code_signing_certificates_1.generateKeyPair)();
++    const validityNotBefore = new Date();
++    const validityNotAfter = new Date();
++    validityNotAfter.setFullYear(validityNotAfter.getFullYear() + validityDurationYears);
++    const certificate = (0, code_signing_certificates_1.generateSelfSignedCodeSigningCertificate)({
++        keyPair,
++        validityNotBefore,
++        validityNotAfter,
++        commonName: certificateCommonName,
++    });
++    const keyPairPEM = (0, code_signing_certificates_1.convertKeyPairToPEM)(keyPair);
++    const certificatePEM = (0, code_signing_certificates_1.convertCertificateToCertificatePEM)(certificate);
++    await Promise.all([
++        fs_1.promises.writeFile(path_1.default.join(keyOutputDir, 'public-key.pem'), keyPairPEM.publicKeyPEM),
++        fs_1.promises.writeFile(path_1.default.join(keyOutputDir, 'private-key.pem'), keyPairPEM.privateKeyPEM),
++        fs_1.promises.writeFile(path_1.default.join(certificateOutputDir, 'certificate.pem'), certificatePEM),
++    ]);
++    (0, log_1.log)(`Generated public and private keys output in ${keyOutputDir}. Remember to add them to .gitignore or to encrypt them. (e.g. with git-crypt)`);
++    (0, log_1.log)(`Generated code signing certificate output in ${certificateOutputDir}.`);
++    (0, log_1.log)(`To automatically configure this project for code signing, run \`yarn expo-updates codesigning:configure --certificate-input-directory=${certificateOutput} --key-input-directory=${keyOutput}\`.`);
++}
++exports.generateCodeSigningAsync = generateCodeSigningAsync;
+diff --git a/node_modules/expo-updates/build-cli/utils/args.d.ts b/node_modules/expo-updates/build-cli/utils/args.d.ts
+new file mode 100644
+index 0000000..d6d5977
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/utils/args.d.ts
+@@ -0,0 +1,16 @@
++import arg from 'arg';
++/**
++ * Parse the first argument as a project directory.
++ *
++ * @returns valid project directory.
++ */
++export declare function getProjectRoot(args: arg.Result<arg.Spec>): string;
++/**
++ * Parse args and assert unknown options.
++ *
++ * @param schema the `args` schema for parsing the command line arguments.
++ * @param argv extra strings
++ * @returns processed args object.
++ */
++export declare function assertArgs(schema: arg.Spec, argv: string[]): arg.Result<arg.Spec>;
++export declare function requireArg(args: arg.Result<arg.Spec>, name: any): any;
+diff --git a/node_modules/expo-updates/build-cli/utils/args.js b/node_modules/expo-updates/build-cli/utils/args.js
+new file mode 100644
+index 0000000..bb9c608
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/utils/args.js
+@@ -0,0 +1,52 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.requireArg = exports.assertArgs = exports.getProjectRoot = void 0;
++const tslib_1 = require("tslib");
++// Common utilities for interacting with `args` library.
++// These functions should be used by every command.
++const arg_1 = tslib_1.__importDefault(require("arg"));
++const fs_1 = require("fs");
++const path_1 = require("path");
++const Log = tslib_1.__importStar(require("./log"));
++/**
++ * Parse the first argument as a project directory.
++ *
++ * @returns valid project directory.
++ */
++function getProjectRoot(args) {
++    const projectRoot = (0, path_1.resolve)(args._[0] || '.');
++    if (!(0, fs_1.existsSync)(projectRoot)) {
++        Log.exit(`Invalid project root: ${projectRoot}`);
++    }
++    return projectRoot;
++}
++exports.getProjectRoot = getProjectRoot;
++/**
++ * Parse args and assert unknown options.
++ *
++ * @param schema the `args` schema for parsing the command line arguments.
++ * @param argv extra strings
++ * @returns processed args object.
++ */
++function assertArgs(schema, argv) {
++    try {
++        return (0, arg_1.default)(schema, { argv });
++    }
++    catch (error) {
++        // Ensure unknown options are handled the same way.
++        if (error.code === 'ARG_UNKNOWN_OPTION') {
++            Log.exit(error.message, 1);
++        }
++        // Otherwise rethrow the error.
++        throw error;
++    }
++}
++exports.assertArgs = assertArgs;
++function requireArg(args, name) {
++    const value = args[name];
++    if (value === undefined || value === null) {
++        Log.exit(`${name} must be provided`, 1);
++    }
++    return value;
++}
++exports.requireArg = requireArg;
+diff --git a/node_modules/expo-updates/build-cli/utils/dir.d.ts b/node_modules/expo-updates/build-cli/utils/dir.d.ts
+new file mode 100644
+index 0000000..3104332
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/utils/dir.d.ts
+@@ -0,0 +1 @@
++export declare function ensureDirAsync(path: string): Promise<string | undefined>;
+diff --git a/node_modules/expo-updates/build-cli/utils/dir.js b/node_modules/expo-updates/build-cli/utils/dir.js
+new file mode 100644
+index 0000000..d4ef45d
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/utils/dir.js
+@@ -0,0 +1,8 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.ensureDirAsync = void 0;
++const fs_1 = require("fs");
++function ensureDirAsync(path) {
++    return fs_1.promises.mkdir(path, { recursive: true });
++}
++exports.ensureDirAsync = ensureDirAsync;
+diff --git a/node_modules/expo-updates/build-cli/utils/log.d.ts b/node_modules/expo-updates/build-cli/utils/log.d.ts
+new file mode 100644
+index 0000000..996b2e6
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/utils/log.d.ts
+@@ -0,0 +1,7 @@
++export declare function time(label?: string): void;
++export declare function timeEnd(label?: string): void;
++export declare function error(...message: string[]): void;
++export declare function warn(...message: string[]): void;
++export declare function log(...message: string[]): void;
++/** Log a message and exit the current process. If the `code` is non-zero then `console.error` will be used instead of `console.log`. */
++export declare function exit(message: string, code?: number): never;
+diff --git a/node_modules/expo-updates/build-cli/utils/log.js b/node_modules/expo-updates/build-cli/utils/log.js
+new file mode 100644
+index 0000000..c44aed9
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/utils/log.js
+@@ -0,0 +1,34 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.exit = exports.log = exports.warn = exports.error = exports.timeEnd = exports.time = void 0;
++function time(label) {
++    console.time(label);
++}
++exports.time = time;
++function timeEnd(label) {
++    console.timeEnd(label);
++}
++exports.timeEnd = timeEnd;
++function error(...message) {
++    console.error(...message);
++}
++exports.error = error;
++function warn(...message) {
++    console.warn(...message);
++}
++exports.warn = warn;
++function log(...message) {
++    console.log(...message);
++}
++exports.log = log;
++/** Log a message and exit the current process. If the `code` is non-zero then `console.error` will be used instead of `console.log`. */
++function exit(message, code = 1) {
++    if (code === 0) {
++        log(message);
++    }
++    else {
++        error(message);
++    }
++    process.exit(code);
++}
++exports.exit = exit;
+diff --git a/node_modules/expo-updates/build-cli/utils/modifyConfigAsync.d.ts b/node_modules/expo-updates/build-cli/utils/modifyConfigAsync.d.ts
+new file mode 100644
+index 0000000..0edbaee
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/utils/modifyConfigAsync.d.ts
+@@ -0,0 +1,3 @@
++import { ExpoConfig } from '@expo/config';
++/** Wraps `[@expo/config] modifyConfigAsync()` and adds additional logging. */
++export declare function attemptModification(projectRoot: string, edits: Partial<ExpoConfig>, exactEdits: Partial<ExpoConfig>): Promise<void>;
+diff --git a/node_modules/expo-updates/build-cli/utils/modifyConfigAsync.js b/node_modules/expo-updates/build-cli/utils/modifyConfigAsync.js
+new file mode 100644
+index 0000000..4956630
+--- /dev/null
++++ b/node_modules/expo-updates/build-cli/utils/modifyConfigAsync.js
+@@ -0,0 +1,41 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.attemptModification = void 0;
++const tslib_1 = require("tslib");
++const config_1 = require("@expo/config");
++const chalk_1 = tslib_1.__importDefault(require("chalk"));
++const Log = tslib_1.__importStar(require("./log"));
++/** Wraps `[@expo/config] modifyConfigAsync()` and adds additional logging. */
++async function attemptModification(projectRoot, edits, exactEdits) {
++    const modification = await (0, config_1.modifyConfigAsync)(projectRoot, edits, {
++        skipSDKVersionRequirement: true,
++    });
++    if (modification.type === 'success') {
++        Log.log();
++    }
++    else {
++        warnAboutConfigAndThrow(modification.type, modification.message, exactEdits);
++    }
++}
++exports.attemptModification = attemptModification;
++function logNoConfig() {
++    Log.log(chalk_1.default.yellow(`No Expo config was found. Please create an Expo config (${chalk_1.default.bold `app.json`} or ${chalk_1.default.bold `app.config.js`}) in your project root.`));
++}
++function warnAboutConfigAndThrow(type, message, edits) {
++    Log.log();
++    if (type === 'warn') {
++        // The project is using a dynamic config, give the user a helpful log and bail out.
++        Log.log(chalk_1.default.yellow(message));
++    }
++    else {
++        logNoConfig();
++    }
++    notifyAboutManualConfigEdits(edits);
++    throw new Error();
++}
++function notifyAboutManualConfigEdits(edits) {
++    Log.log(chalk_1.default.cyan(`Please add the following to your Expo config`));
++    Log.log();
++    Log.log(JSON.stringify(edits, null, 2));
++    Log.log();
++}
+diff --git a/node_modules/expo-updates/ios/EXUpdates/AppController.swift b/node_modules/expo-updates/ios/EXUpdates/AppController.swift
+index ba63b60..b4ef194 100644
+--- a/node_modules/expo-updates/ios/EXUpdates/AppController.swift
++++ b/node_modules/expo-updates/ios/EXUpdates/AppController.swift
+@@ -203,8 +203,29 @@ public class AppController: NSObject {
+   }
+   private static var _sharedInstance: InternalAppControllerInterface?
+   public static var sharedInstance: InternalAppControllerInterface {
+-    assert(_sharedInstance != nil, "AppController.sharedInstace was called before the module was initialized")
+-    return _sharedInstance!
++    if let existingInstance = _sharedInstance {
++      return existingInstance
++    }
++
++    // Gracefully initialize a controller if consumers access sharedInstance early.
++    initializeWithoutStarting()
++
++    if let initialized = _sharedInstance {
++      return initialized
++    }
++
++    // As a final fallback (e.g., missing Expo.plist), return a disabled controller so
++    // release builds do not crash on a nil force unwrap.
++    let fallbackError = UpdatesError.appControllerInitializationError(
++      cause: NSError(
++        domain: "EXUpdatesAppController",
++        code: 1,
++        userInfo: [NSLocalizedDescriptionKey: "AppController.sharedInstance accessed before initialization"]
++      )
++    )
++    let disabledController = DisabledAppController(error: fallbackError)
++    _sharedInstance = disabledController
++    return disabledController
+   }
+   private static var _overrideConfig: UpdatesConfig?
+ 
