@@ -14,12 +14,26 @@ const SPM_LINES = [
   'spm_pkg "mlx-swift-examples", :git => "https://github.com/ml-explore/mlx-swift-examples", :commit => "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631", :products => ["MLXLLM", "MLXVLM", "MLXLMCommon", "MLXMNIST", "MLXEmbedders", "StableDiffusion"]',
   'spm_pkg "swift-transformers", :git => "https://github.com/huggingface/swift-transformers", :version => "1.0.0", :products => ["Transformers"]',
 ];
+const SPM_FILELIST_GUARD = [
+  "  # Work around cocoapods-spm expecting resource xcfilelist files in CI.",
+  "  require 'fileutils'",
+  "  installer.aggregate_targets.each do |aggregate_target|",
+  "    support_files_dir = aggregate_target.support_files_dir",
+  "    FileUtils.mkdir_p(support_files_dir) unless File.directory?(support_files_dir)",
+  "    aggregate_target.build_configurations.each do |config|",
+  "      ['input', 'output'].each do |filetype|",
+  '        filelist = File.join(support_files_dir, "#{aggregate_target.name}-resources-#{config.name}-#{filetype}-files.xcfilelist")',
+  "        File.write(filelist, '') unless File.exist?(filelist)",
+  "      end",
+  "    end",
+  "  end",
+].join("\n");
 
 const ensureMLXPods = (podfile) => {
   const hasAllSpmLines = SPM_LINES.every((line) => podfile.includes(line));
   const hasRequireBlock = podfile.includes("require 'cocoapods-spm'");
   if (hasRequireBlock && podfile.includes(PLUGIN_LINE) && hasAllSpmLines) {
-    return podfile;
+    return ensureSpmFilelistGuard(podfile);
   }
 
   let updatedPodfile = podfile;
@@ -55,9 +69,29 @@ const ensureMLXPods = (podfile) => {
     );
   }
 
-  return updatedPodfile.replace(/target ['"].+?['"] do/, (match) => {
-    return `${match}\n${podsBlock}`;
-  });
+  const updatedWithPods = updatedPodfile.replace(
+    /target ['"].+?['"] do/,
+    (match) => {
+      return `${match}\n${podsBlock}`;
+    },
+  );
+
+  return ensureSpmFilelistGuard(updatedWithPods);
+};
+
+const ensureSpmFilelistGuard = (podfile) => {
+  if (podfile.includes("cocoapods-spm expecting resource xcfilelist")) {
+    return podfile;
+  }
+
+  if (podfile.includes("post_install do |installer|")) {
+    return podfile.replace(
+      "post_install do |installer|",
+      `post_install do |installer|\n${SPM_FILELIST_GUARD}`,
+    );
+  }
+
+  return `${podfile}\n\npost_install do |installer|\n${SPM_FILELIST_GUARD}\nend\n`;
 };
 
 const withMLXPods = (config) => {
