@@ -2,7 +2,7 @@ const { withPodfile, withXcodeProject } = require("@expo/config-plugins");
 
 const SPM_PLUGIN = "plugin 'cocoapods-spm'";
 const SPM_PKG =
-  "spm_pkg 'mlx-swift', :git => 'https://github.com/ml-explore/mlx-swift.git', :tag => '0.24.0'";
+  "spm_pkg 'mlx-swift', :git => 'https://github.com/ml-explore/mlx-swift.git', :tag => '0.25.6'";
 
 const SPM_FILELIST_GUARD = [
   "  # Work around cocoapods-spm expecting resource xcfilelist files in CI.",
