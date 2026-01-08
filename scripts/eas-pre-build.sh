@@ -24,10 +24,16 @@ if [[ -n "${XC_LIST}" ]]; then
   while IFS= read -r f; do
     if grep -qi "Cmlx\.modulemap" "${f}"; then
       echo "[eas-pre-build] Stripping Cmlx.modulemap from: ${f}"
-      # Remove any line that references the modulemap (covers OTHER_CFLAGS, OTHER_SWIFT_FLAGS, etc.)
-      # Keep file formatting stable.
+      # Remove only the modulemap flag/path to keep other flags intact.
       tmp="$(mktemp)"
-      awk 'BEGIN{IGNORECASE=1} $0 !~ /Cmlx\.modulemap/ {print $0}' "${f}" > "${tmp}"
+      awk 'BEGIN{IGNORECASE=1} {
+        line=$0
+        if (line ~ /Cmlx\.modulemap/) {
+          gsub(/-fmodule-map-file(=|[[:space:]]+)[^[:space:]\"]*Cmlx\.modulemap[^[:space:]\"]*/, "", line)
+          gsub(/[^[:space:]\"]*Cmlx\.modulemap[^[:space:]\"]*/, "", line)
+        }
+        print line
+      }' "${f}" > "${tmp}"
       mv "${tmp}" "${f}"
     fi
   done <<< "${XC_LIST}"
@@ -38,7 +44,14 @@ PBXPROJ="${PODS_DIR}/Pods.xcodeproj/project.pbxproj"
 if [[ -f "${PBXPROJ}" ]] && grep -qi "Cmlx\.modulemap" "${PBXPROJ}"; then
   echo "[eas-pre-build] Stripping Cmlx.modulemap from: ${PBXPROJ}"
   tmp="$(mktemp)"
-  awk 'BEGIN{IGNORECASE=1} $0 !~ /Cmlx\.modulemap/ {print $0}' "${PBXPROJ}" > "${tmp}"
+  awk 'BEGIN{IGNORECASE=1} {
+    line=$0
+    if (line ~ /Cmlx\.modulemap/) {
+      gsub(/-fmodule-map-file(=|[[:space:]]+)[^[:space:]\"]*Cmlx\.modulemap[^[:space:]\"]*/, "", line)
+      gsub(/[^[:space:]\"]*Cmlx\.modulemap[^[:space:]\"]*/, "", line)
+    }
+    print line
+  }' "${PBXPROJ}" > "${tmp}"
   mv "${tmp}" "${PBXPROJ}"
 fi
 
