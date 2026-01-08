@@ -89,7 +89,7 @@ const SPM_FILELIST_GUARD = [
   '        contents = contents.gsub(/\\b#{Regexp.escape(k)}\\s*=\\s*YES\\b/, "#{k} = NO")',
   "      end",
   "      contents = contents.gsub(/-fmodule-map-file(?:=|\\s+)(?:\\\"|')?[^\\s\\\"']*Cmlx\\.modulemap[^\\s\\\"']*(?:\\\"|')?/, '')",
-  "      contents = contents.gsub(/\\s+/, ' ')",
+  "      contents = contents.gsub(/ {2,}/, ' ')",
   "      File.write(xcconfig_path, contents)",
   "    end",
   "  end",
