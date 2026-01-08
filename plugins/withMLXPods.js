@@ -56,17 +56,19 @@ const ensureMLXPods = (podfile) => {
     updatedPodfile.includes('spm_pkg "mlx-swift"');
 
   if (!hasSpmBlockAlready && updatedPodfile.includes("use_expo_modules!")) {
-    return updatedPodfile.replace(
+    const updatedWithPods = updatedPodfile.replace(
       "use_expo_modules!",
       `use_expo_modules!\n${podsBlock}`,
     );
+    return ensureSpmFilelistGuard(updatedWithPods);
   }
 
   if (!hasSpmBlockAlready && updatedPodfile.includes("use_react_native!")) {
-    return updatedPodfile.replace(
+    const updatedWithPods = updatedPodfile.replace(
       "use_react_native!",
       `use_react_native!\n${podsBlock}`,
     );
+    return ensureSpmFilelistGuard(updatedWithPods);
   }
 
   const updatedWithPods = updatedPodfile.replace(
@@ -84,14 +86,14 @@ const ensureSpmFilelistGuard = (podfile) => {
     return podfile;
   }
 
-  if (podfile.includes("post_integrate do |installer|")) {
+  if (podfile.includes("post_install do |installer|")) {
     return podfile.replace(
-      "post_integrate do |installer|",
-      `post_integrate do |installer|\n${SPM_FILELIST_GUARD}`,
+      "post_install do |installer|",
+      `post_install do |installer|\n${SPM_FILELIST_GUARD}`,
     );
   }
 
-  return `${podfile}\n\npost_integrate do |installer|\n${SPM_FILELIST_GUARD}\nend\n`;
+  return `${podfile}\n\npost_install do |installer|\n${SPM_FILELIST_GUARD}\nend\n`;
 };
 
 const withMLXPods = (config) => {
