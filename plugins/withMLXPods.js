@@ -15,11 +15,216 @@ const SPM_LINES = [
   'spm_pkg "swift-transformers", :git => "https://github.com/huggingface/swift-transformers", :version => "1.0.0", :products => ["Transformers"]',
 ];
 
+const SPM_FILELIST_GUARD = [
+  "  # Work around cocoapods-spm expecting resource xcfilelist files in CI.",
+  "  require 'fileutils'",
+  "  # Archive builds can fail if explicit modules are enabled and a stale modulemap path is injected.",
+  "  # We force-disable explicit modules and scrub any references to Cmlx.modulemap wherever they appear.",
+  "  strip_modulemap_flags = lambda do |value|",
+  "    return value unless value.to_s.include?('Cmlx.modulemap')",
+  "    scrubbed = value.to_s",
+  "      .gsub(/-fmodule-map-file(=|\\s+)[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
+  "      .gsub(/[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
+  "      .strip",
+  "    scrubbed.empty? ? nil : scrubbed",
+  "  end",
+  "  force_disable_explicit_modules = lambda do |settings|",
+  "    settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'",
+  "    settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'",
+  "  end",
+  "  scrub_build_settings = lambda do |settings|",
+  "    force_disable_explicit_modules.call(settings)",
+  "    settings.keys.each do |key|",
+  "      value = settings[key]",
+  "      next unless value.to_s.include?('Cmlx.modulemap')",
+  "      if value.is_a?(Array)",
+  "        sanitized = value.filter_map { |item| strip_modulemap_flags.call(item) }",
+  "        settings[key] = sanitized",
+  "      else",
+  "        settings[key] = strip_modulemap_flags.call(value)",
+  "      end",
+  "    end",
+  "    ['MODULEMAP_FILE', 'CLANG_MODULEMAP_FILE'].each do |key|",
+  "      if settings[key].to_s.include?('Cmlx.modulemap')",
+  "        settings.delete(key)",
+  "      end",
+  "    end",
+  "  end",
+  "  sanitize_xcconfig_line = lambda do |line|",
+  "    return (strip_modulemap_flags.call(line) || '') if line.include?('Cmlx.modulemap')",
+  "    if line =~ /^\\s*(SWIFT_ENABLE_EXPLICIT_MODULES|CLANG_ENABLE_EXPLICIT_MODULES)\\s*=/",
+  "      key = Regexp.last_match(1)",
+  "      return \"#{key} = NO\\n\"",
+  "    end",
+  "    line",
+  "  end",
+  "  installer.aggregate_targets.each do |aggregate_target|",
+  "    support_files_dir = aggregate_target.support_files_dir",
+  "    FileUtils.mkdir_p(support_files_dir) unless File.directory?(support_files_dir)",
+  "    build_configs = if aggregate_target.respond_to?(:build_configurations)",
+  "      aggregate_target.build_configurations",
+  "    elsif aggregate_target.respond_to?(:user_targets)",
+  "      aggregate_target.user_targets.flat_map(&:build_configurations)",
+  "    else",
+  "      []",
+  "    end",
+  "    build_configs.each do |config|",
+  "      ['input', 'output'].each do |filetype|",
+  '        filelist = File.join(support_files_dir, "#{aggregate_target.name}-resources-#{config.name}-#{filetype}-files.xcfilelist")',
+  "        File.write(filelist, '') unless File.exist?(filelist)",
+  "      end",
+  "    end",
+  "    Dir.glob(File.join(support_files_dir, '*.xcconfig')).each do |xcconfig_path|",
+  "      xcconfig = File.read(xcconfig_path)",
+  "      updated = xcconfig",
+  "        .lines",
+  "        .map do |line|",
+  "          sanitize_xcconfig_line.call(line)",
+  "        end",
+  "        .join",
+  "      File.write(xcconfig_path, updated) if updated != xcconfig",
+  "    end",
+  "    if aggregate_target.respond_to?(:user_targets)",
+  "      aggregate_target.user_targets.each do |user_target|",
+  "        user_target.build_configurations.each do |config|",
+  "          scrub_build_settings.call(config.build_settings)",
+  "        end",
+  "      end",
+  "    end",
+  "  end",
+  "  # Remove stale modulemap references that break archive builds.",
+  "  installer.pods_project.targets.each do |target|",
+  "    target.build_configurations.each do |config|",
+  "      config_ref = config.base_configuration_reference",
+  "      next unless config_ref",
+  "      xcconfig_path = config_ref.real_path",
+  "      next unless xcconfig_path && File.exist?(xcconfig_path)",
+  "      xcconfig = File.read(xcconfig_path)",
+  "      updated = xcconfig",
+  "        .lines",
+  "        .map do |line|",
+  "          sanitize_xcconfig_line.call(line)",
+  "        end",
+  "        .join",
+  "      File.write(xcconfig_path, updated) if updated != xcconfig",
+  "    end",
+  "    target.build_configurations.each do |config|",
+  "      scrub_build_settings.call(config.build_settings)",
+  "    end",
+  "  end",
+  "  # Last-resort scrub: remove any lingering references directly inside the Pods project file.",
+  "  begin",
+  "    pbxproj_path = installer.pods_project.path + 'project.pbxproj'",
+  "    if File.exist?(pbxproj_path)",
+  "      pbxproj = File.read(pbxproj_path)",
+  "      updated = pbxproj",
+  "        .gsub(/-fmodule-map-file(=|\\s+)[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
+  "        .gsub(/[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
+  "      File.write(pbxproj_path, updated) if updated != pbxproj",
+  "    end",
+  "  rescue => e",
+  "    Pod::UI.warn(\"[withMLXPods] pbxproj scrub failed: #{e}\")",
+  "  end",
+].join("\n");
+
+const SPM_MODULEMAP_CLEANUP = [
+  "  # Ensure modulemap cleanup runs after post_integrate hooks too.",
+  "  strip_modulemap_flags = lambda do |value|",
+  "    return value unless value.to_s.include?('Cmlx.modulemap')",
+  "    scrubbed = value.to_s",
+  "      .gsub(/-fmodule-map-file(=|\\s+)[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
+  "      .gsub(/[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
+  "      .strip",
+  "    scrubbed.empty? ? nil : scrubbed",
+  "  end",
+  "  force_disable_explicit_modules = lambda do |settings|",
+  "    settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'",
+  "    settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'",
+  "  end",
+  "  scrub_build_settings = lambda do |settings|",
+  "    force_disable_explicit_modules.call(settings)",
+  "    settings.keys.each do |key|",
+  "      value = settings[key]",
+  "      next unless value.to_s.include?('Cmlx.modulemap')",
+  "      if value.is_a?(Array)",
+  "        sanitized = value.filter_map { |item| strip_modulemap_flags.call(item) }",
+  "        settings[key] = sanitized",
+  "      else",
+  "        settings[key] = strip_modulemap_flags.call(value)",
+  "      end",
+  "    end",
+  "    ['MODULEMAP_FILE', 'CLANG_MODULEMAP_FILE'].each do |key|",
+  "      if settings[key].to_s.include?('Cmlx.modulemap')",
+  "        settings.delete(key)",
+  "      end",
+  "    end",
+  "  end",
+  "  sanitize_xcconfig_line = lambda do |line|",
+  "    return (strip_modulemap_flags.call(line) || '') if line.include?('Cmlx.modulemap')",
+  "    if line =~ /^\\s*(SWIFT_ENABLE_EXPLICIT_MODULES|CLANG_ENABLE_EXPLICIT_MODULES)\\s*=/",
+  "      key = Regexp.last_match(1)",
+  "      return \"#{key} = NO\\n\"",
+  "    end",
+  "    line",
+  "  end",
+  "  installer.aggregate_targets.each do |aggregate_target|",
+  "    Dir.glob(File.join(aggregate_target.support_files_dir, '*.xcconfig')).each do |xcconfig_path|",
+  "      xcconfig = File.read(xcconfig_path)",
+  "      updated = xcconfig",
+  "        .lines",
+  "        .map do |line|",
+  "          sanitize_xcconfig_line.call(line)",
+  "        end",
+  "        .join",
+  "      File.write(xcconfig_path, updated) if updated != xcconfig",
+  "    end",
+  "    if aggregate_target.respond_to?(:user_targets)",
+  "      aggregate_target.user_targets.each do |user_target|",
+  "        user_target.build_configurations.each do |config|",
+  "          scrub_build_settings.call(config.build_settings)",
+  "        end",
+  "      end",
+  "    end",
+  "  end",
+  "  installer.pods_project.targets.each do |target|",
+  "    target.build_configurations.each do |config|",
+  "      config_ref = config.base_configuration_reference",
+  "      next unless config_ref",
+  "      xcconfig_path = config_ref.real_path",
+  "      next unless xcconfig_path && File.exist?(xcconfig_path)",
+  "      xcconfig = File.read(xcconfig_path)",
+  "      updated = xcconfig",
+  "        .lines",
+  "        .map do |line|",
+  "          sanitize_xcconfig_line.call(line)",
+  "        end",
+  "        .join",
+  "      File.write(xcconfig_path, updated) if updated != xcconfig",
+  "    end",
+  "    target.build_configurations.each do |config|",
+  "      scrub_build_settings.call(config.build_settings)",
+  "    end",
+  "  end",
+  "  # Last-resort scrub: remove any lingering references directly inside the Pods project file.",
+  "  begin",
+  "    pbxproj_path = installer.pods_project.path + 'project.pbxproj'",
+  "    if File.exist?(pbxproj_path)",
+  "      pbxproj = File.read(pbxproj_path)",
+  "      updated = pbxproj",
+  "        .gsub(/-fmodule-map-file(=|\\s+)[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
+  "        .gsub(/[^\\s\"]*Cmlx\\.modulemap[^\\s\"]*/, '')",
+  "      File.write(pbxproj_path, updated) if updated != pbxproj",
+  "    end",
+  "  rescue => e",
+  "    Pod::UI.warn(\"[withMLXPods] pbxproj scrub failed: #{e}\")",
+  "  end",
+].join("\n");
+
 const ensureMLXPods = (podfile) => {
   const hasAllSpmLines = SPM_LINES.every((line) => podfile.includes(line));
   const hasRequireBlock = podfile.includes("require 'cocoapods-spm'");
   if (hasRequireBlock && podfile.includes(PLUGIN_LINE) && hasAllSpmLines) {
-    return podfile;
+    return ensureSpmFilelistGuard(podfile);
   }
 
   let updatedPodfile = podfile;
@@ -42,22 +247,89 @@ const ensureMLXPods = (podfile) => {
     updatedPodfile.includes('spm_pkg "mlx-swift"');
 
   if (!hasSpmBlockAlready && updatedPodfile.includes("use_expo_modules!")) {
-    return updatedPodfile.replace(
+    const updatedWithPods = updatedPodfile.replace(
       "use_expo_modules!",
       `use_expo_modules!\n${podsBlock}`,
     );
+    return ensureSpmFilelistGuard(updatedWithPods);
   }
 
   if (!hasSpmBlockAlready && updatedPodfile.includes("use_react_native!")) {
-    return updatedPodfile.replace(
+    const updatedWithPods = updatedPodfile.replace(
       "use_react_native!",
       `use_react_native!\n${podsBlock}`,
     );
+    return ensureSpmFilelistGuard(updatedWithPods);
   }
 
-  return updatedPodfile.replace(/target ['"].+?['"] do/, (match) => {
-    return `${match}\n${podsBlock}`;
-  });
+  const updatedWithPods = updatedPodfile.replace(
+    /target ['"].+?['"] do/,
+    (match) => {
+      return `${match}\n${podsBlock}`;
+    },
+  );
+
+  return ensureSpmFilelistGuard(updatedWithPods);
+};
+
+const ensureSpmFilelistGuard = (podfile) => {
+  if (podfile.includes("cocoapods-spm expecting resource xcfilelist")) {
+    return podfile;
+  }
+
+  const injectBeforeBlockEnd = (contents, blockName, rubyLines) => {
+    const startNeedle = `${blockName} do |installer|`;
+    const lines = contents.split(/\r?\n/);
+    const startIndex = lines.findIndex((line) => line.includes(startNeedle));
+    if (startIndex === -1) return null;
+
+    const stripComments = (line) => line.replace(/#.*$/, "");
+    const countToken = (line, token) => {
+      const matches = stripComments(line).match(
+        new RegExp(`\\b${token}\\b`, "g"),
+      );
+      return matches ? matches.length : 0;
+    };
+
+    let depth = 1;
+    for (let i = startIndex + 1; i < lines.length; i += 1) {
+      const line = lines[i];
+      depth += countToken(line, "do");
+      depth -= countToken(line, "end");
+
+      if (depth === 0) {
+        lines.splice(i, 0, ...rubyLines.split("\n"));
+        return lines.join("\n");
+      }
+    }
+
+    return null;
+  };
+
+  let updatedPodfile = podfile;
+
+  const postInstallInjected = injectBeforeBlockEnd(
+    updatedPodfile,
+    "post_install",
+    SPM_FILELIST_GUARD,
+  );
+  if (postInstallInjected) {
+    updatedPodfile = postInstallInjected;
+  } else {
+    // No post_install block: create one and run our guard at the end.
+    updatedPodfile = `${updatedPodfile}\n\npost_install do |installer|\n${SPM_FILELIST_GUARD}\nend\n`;
+  }
+
+  const postIntegrateInjected = injectBeforeBlockEnd(
+    updatedPodfile,
+    "post_integrate",
+    SPM_MODULEMAP_CLEANUP,
+  );
+  if (postIntegrateInjected) {
+    return postIntegrateInjected;
+  }
+
+  return `${updatedPodfile}\n\npost_integrate do |installer|\n${SPM_MODULEMAP_CLEANUP}\nend\n`;
 };
 
 const withMLXPods = (config) => {
