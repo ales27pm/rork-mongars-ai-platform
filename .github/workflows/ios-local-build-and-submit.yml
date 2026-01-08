@@ -49,6 +49,45 @@ jobs:
       - name: Verify EAS auth
         run: eas whoami
 
+      - name: Validate EAS project ID matches slug
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const { execSync } = require('child_process');
+
+          const app = require('./app.json');
+          const slug = app?.expo?.slug;
+          const projectId = process.env.EAS_PROJECT_ID;
+
+          if (!slug || !projectId) {
+            process.exit(0);
+          }
+
+          let info;
+          try {
+            info = JSON.parse(
+              execSync('eas project:info --json', {
+                stdio: ['ignore', 'pipe', 'pipe'],
+              })
+                .toString()
+                .trim(),
+            );
+          } catch (error) {
+            console.warn(
+              'Unable to fetch EAS project info; skipping slug validation.',
+            );
+            process.exit(0);
+          }
+
+          const infoSlug = info?.slug ?? info?.project?.slug ?? info?.name;
+          if (infoSlug && infoSlug !== slug) {
+            console.warn(
+              `EAS_PROJECT_ID is linked to slug "${infoSlug}" but app.json slug is "${slug}". Clearing EAS_PROJECT_ID.`,
+            );
+            fs.appendFileSync(process.env.GITHUB_ENV, 'EAS_PROJECT_ID=\\n');
+          }
+          NODE
+
       - name: Link/create EAS project (non-interactive)
         # This writes expo.extra.eas.projectId into your config when missing,
         # and links the project so non-interactive builds work in CI.
