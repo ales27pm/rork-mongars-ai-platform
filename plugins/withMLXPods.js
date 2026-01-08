@@ -84,14 +84,14 @@ const ensureSpmFilelistGuard = (podfile) => {
     return podfile;
   }
 
-  if (podfile.includes("post_install do |installer|")) {
+  if (podfile.includes("post_integrate do |installer|")) {
     return podfile.replace(
-      "post_install do |installer|",
-      `post_install do |installer|\n${SPM_FILELIST_GUARD}`,
+      "post_integrate do |installer|",
+      `post_integrate do |installer|\n${SPM_FILELIST_GUARD}`,
     );
   }
 
-  return `${podfile}\n\npost_install do |installer|\n${SPM_FILELIST_GUARD}\nend\n`;
+  return `${podfile}\n\npost_integrate do |installer|\n${SPM_FILELIST_GUARD}\nend\n`;
 };
 
 const withMLXPods = (config) => {
