@@ -79,6 +79,44 @@ const SPM_FILELIST_GUARD = [
   "    end",
   "  end",
 ].join("\n");
+const SPM_MODULEMAP_CLEANUP = [
+  "  # Ensure modulemap cleanup runs after post_integrate hooks too.",
+  "  installer.pods_project.targets.each do |target|",
+  "    target.build_configurations.each do |config|",
+  "      config_ref = config.base_configuration_reference",
+  "      next unless config_ref",
+  "      xcconfig_path = config_ref.real_path",
+  "      next unless xcconfig_path && File.exist?(xcconfig_path)",
+  "      xcconfig = File.read(xcconfig_path)",
+  "      updated = xcconfig",
+  "        .lines",
+  "        .reject { |line| line.include?('Cmlx.modulemap') }",
+  "        .join",
+  "      File.write(xcconfig_path, updated) if updated != xcconfig",
+  "    end",
+  "    target.build_configurations.each do |config|",
+  "      settings = config.build_settings",
+  "      sanitize = lambda do |value|",
+  "        if value.is_a?(Array)",
+  "          value.filter_map do |item|",
+  "            cleaned = item.to_s.gsub(/[^\\s]*Cmlx\\.modulemap[^\\s]*/, '')",
+  "            cleaned.strip.empty? ? nil : cleaned",
+  "          end",
+  "        else",
+  "          value.to_s.gsub(/[^\\s]*Cmlx\\.modulemap[^\\s]*/, '').strip",
+  "        end",
+  "      end",
+  "      settings.keys.each do |key|",
+  "        value = settings[key]",
+  "        next unless value.to_s.include?('Cmlx.modulemap')",
+  "        settings[key] = sanitize.call(value)",
+  "      end",
+  "      if settings['MODULEMAP_FILE'].to_s.include?('Cmlx.modulemap')",
+  "        settings.delete('MODULEMAP_FILE')",
+  "      end",
+  "    end",
+  "  end",
+].join("\n");
 
 const ensureMLXPods = (podfile) => {
   const hasAllSpmLines = SPM_LINES.every((line) => podfile.includes(line));
@@ -137,14 +175,25 @@ const ensureSpmFilelistGuard = (podfile) => {
     return podfile;
   }
 
-  if (podfile.includes("post_install do |installer|")) {
-    return podfile.replace(
+  let updatedPodfile = podfile;
+
+  if (updatedPodfile.includes("post_install do |installer|")) {
+    updatedPodfile = updatedPodfile.replace(
       "post_install do |installer|",
       `post_install do |installer|\n${SPM_FILELIST_GUARD}`,
     );
+  } else {
+    updatedPodfile = `${updatedPodfile}\n\npost_install do |installer|\n${SPM_FILELIST_GUARD}\nend\n`;
   }
 
-  return `${podfile}\n\npost_install do |installer|\n${SPM_FILELIST_GUARD}\nend\n`;
+  if (updatedPodfile.includes("post_integrate do |installer|")) {
+    return updatedPodfile.replace(
+      "post_integrate do |installer|",
+      `post_integrate do |installer|\n${SPM_MODULEMAP_CLEANUP}`,
+    );
+  }
+
+  return `${updatedPodfile}\n\npost_integrate do |installer|\n${SPM_MODULEMAP_CLEANUP}\nend\n`;
 };
 
 const withMLXPods = (config) => {
