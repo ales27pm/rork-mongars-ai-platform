@@ -45,6 +45,18 @@ const SPM_FILELIST_GUARD = [
   "      updated = xcconfig.gsub(/-fmodule-map-file=[^\\s]*Cmlx\\.modulemap\\s*/, '')",
   "      File.write(xcconfig_path, updated) if updated != xcconfig",
   "    end",
+  "    target.build_configurations.each do |config|",
+  "      settings = config.build_settings",
+  "      ['OTHER_CFLAGS', 'OTHER_SWIFT_FLAGS'].each do |flag_key|",
+  "        value = settings[flag_key]",
+  "        next unless value",
+  "        filtered = Array(value).reject { |flag| flag.to_s.include?('Cmlx.modulemap') }",
+  "        settings[flag_key] = value.is_a?(Array) ? filtered : filtered.join(' ')",
+  "      end",
+  "      if settings['MODULEMAP_FILE'].to_s.include?('Cmlx.modulemap')",
+  "        settings.delete('MODULEMAP_FILE')",
+  "      end",
+  "    end",
   "  end",
 ].join("\n");
 
