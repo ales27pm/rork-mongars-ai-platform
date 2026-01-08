@@ -16,5 +16,4 @@ if (projectId) {
 module.exports = {
   ...expoConfig,
   slug: resolvedSlug,
-  extra,
 };
