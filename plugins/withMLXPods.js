@@ -208,9 +208,9 @@ function ensureMLXPods(podfile) {
   updated = updated.replace(/^spm_pkg.*mlx-swift.*$/gm, SPM_PKG);
 
   // Ensure cocoapods-spm plugin line exists (near the top is fine).
-  if (!updated.includes(SPM_PLUGIN)) {
-    updated = `${SPM_PLUGIN}\n${updated}`;
-  }
+  function ensurePostInstallBlock(podfile) {
+    if (/post_install\s+do\s+\|installer\|/.test(podfile)) return podfile;
+
 
   // Ensure the MLX SPM package declaration exists.
   if (!updated.includes(SPM_PKG)) {
