@@ -197,51 +197,18 @@ const ensureSpmFilelistGuard = (podfile) => {
     return podfile;
   }
 
-  const injectBeforeEndOfBlock = (contents, blockName, rubyLines) => {
-    // We need to inject *near the end* of the block, but Podfile blocks contain many nested `end`s.
-    // Heuristic: pick the `end` at column 0 whose next non-empty, non-comment line starts a new top-level DSL block.
+  const injectAfterBlockStart = (contents, blockName, rubyLines) => {
     const startNeedle = `${blockName} do |installer|`;
     const startIdx = contents.indexOf(startNeedle);
     if (startIdx === -1) return null;
 
-    const afterStartIdx = startIdx + startNeedle.length;
-    const endRe = /^end\s*$/gm;
-    let match;
-    while ((match = endRe.exec(contents)) !== null) {
-      if (match.index <= afterStartIdx) continue;
-
-      const endLineStart = match.index;
-      const endLineEnd = match.index + match[0].length;
-
-      const after = contents.slice(endLineEnd);
-      const nextSignificant = after
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .find((line) => line.length > 0 && !line.startsWith("#"));
-
-      const looksLikeBlockBoundary =
-        nextSignificant === undefined ||
-        nextSignificant.startsWith("post_") ||
-        nextSignificant.startsWith("target ") ||
-        nextSignificant.startsWith("abstract_target ") ||
-        nextSignificant.startsWith("install!") ||
-        nextSignificant.startsWith("platform ") ||
-        nextSignificant.startsWith("use_") ||
-        nextSignificant.startsWith("inhibit_all_warnings!") ||
-        nextSignificant.startsWith("workspace ");
-
-      if (!looksLikeBlockBoundary) continue;
-
-      // Insert *before* this `end` line.
-      return `${contents.slice(0, endLineStart)}${rubyLines}\n${contents.slice(endLineStart)}`;
-    }
-
-    return null;
+    const insertAt = startIdx + startNeedle.length;
+    return `${contents.slice(0, insertAt)}\n${rubyLines}${contents.slice(insertAt)}`;
   };
 
   let updatedPodfile = podfile;
 
-  const postInstallInjected = injectBeforeEndOfBlock(
+  const postInstallInjected = injectAfterBlockStart(
     updatedPodfile,
     "post_install",
     SPM_FILELIST_GUARD,
@@ -253,7 +220,7 @@ const ensureSpmFilelistGuard = (podfile) => {
     updatedPodfile = `${updatedPodfile}\n\npost_install do |installer|\n${SPM_FILELIST_GUARD}\nend\n`;
   }
 
-  const postIntegrateInjected = injectBeforeEndOfBlock(
+  const postIntegrateInjected = injectAfterBlockStart(
     updatedPodfile,
     "post_integrate",
     SPM_MODULEMAP_CLEANUP,
