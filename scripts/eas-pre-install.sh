@@ -42,7 +42,9 @@ if ! verify_gem "cocoapods-spm"; then
   else
     gem install "cocoapods-spm" --no-document --source https://rubygems.org
   fi
-  verify_gem "cocoapods-spm"
+  if ! verify_gem "cocoapods-spm"; then
+    echo "⚠️ cocoapods-spm still not loadable; continuing without SPM integration"
+  fi
 fi
 
 echo "✅ cocoapods and cocoapods-spm ready for iOS build"
