@@ -90,6 +90,46 @@ jobs:
           }
           NODE
 
+      - name: Validate iOS credentials are configured in EAS
+        run: |
+          node - <<'NODE'
+          const { execSync } = require('child_process');
+
+          let output;
+          try {
+            output = execSync(
+              'eas credentials --platform ios --profile production --non-interactive --json',
+              {
+                stdio: ['ignore', 'pipe', 'pipe'],
+              },
+            )
+              .toString()
+              .trim();
+          } catch (error) {
+            console.error(
+              'EAS iOS credentials are not validated for non-interactive builds. Run `eas credentials --platform ios` locally to set them up.',
+            );
+            process.exit(1);
+          }
+
+          const payload = output ? JSON.parse(output) : null;
+          const hasDistribution = Boolean(
+            payload?.distributionCertificate?.serialNumber ??
+              payload?.distributionCertificate?.id,
+          );
+          const hasProvisioningProfile = Boolean(
+            payload?.provisioningProfile?.id ??
+              payload?.provisioningProfile?.status,
+          );
+
+          if (!hasDistribution || !hasProvisioningProfile) {
+            console.error(
+              'EAS iOS credentials are missing or incomplete. Run `eas credentials --platform ios` locally to configure them.',
+            );
+            process.exit(1);
+          }
+          NODE
+
       - name: Build iOS (local)
         run: |
           mkdir -p artifacts/ios
