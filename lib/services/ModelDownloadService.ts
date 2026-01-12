@@ -82,8 +82,6 @@ export class ModelDownloadService {
       repoId,
     );
 
-    let tempDir = "";
-
     try {
       const repoFiles = await listRepoFiles({
         repo: repoId,
@@ -132,29 +130,34 @@ export class ModelDownloadService {
   }
 
   private isMLXFile(path: string): boolean {
-    return (
-      path.endsWith(".safetensors") ||
-      path.endsWith(".safetensors.index.json") ||
-      path.endsWith("config.json") ||
-      path.endsWith("tokenizer.json") ||
-      path.endsWith("tokenizer.model") ||
-      path.endsWith("tokenizer_config.json") ||
-      path.endsWith("generation_config.json") ||
-      path.endsWith("special_tokens_map.json") ||
-      path.endsWith("vocab.json") ||
-      path.endsWith("merges.txt")
-    );
+    const mlxFilePatterns = [
+      /\.safetensors$/,
+      /\.safetensors\.index\.json$/,
+      /config\.json$/,
+      /tokenizer\.json$/,
+      /tokenizer\.model$/,
+      /tokenizer_config\.json$/,
+      /generation_config\.json$/,
+      /special_tokens_map\.json$/,
+      /vocab\.json$/,
+      /merges\.txt$/,
+      /added_tokens\.json$/,
+      /model\.safetensors\.index\.json$/,
+    ];
+    return mlxFilePatterns.some((pattern) => pattern.test(path));
   }
 
   private isCoreMLFile(path: string): boolean {
-    return (
-      path.includes(".mlpackage") ||
-      path.endsWith(".mlmodel") ||
-      path.endsWith(".bin") ||
-      path.endsWith("Manifest.json") ||
-      path.endsWith("weights.bin") ||
-      path.includes("coreml")
-    );
+    if (path.includes(".mlpackage/") || path.endsWith(".mlpackage")) {
+      return true;
+    }
+    if (path.endsWith(".mlmodel")) {
+      return true;
+    }
+    if (path.includes(".mlpackage") && (path.endsWith("Manifest.json") || path.endsWith(".bin"))) {
+      return true;
+    }
+    return false;
   }
 
   private async fetchHuggingFaceFileSize(
@@ -208,6 +211,26 @@ export class ModelDownloadService {
       console.log(`  URL: ${url}`);
       console.log(`  Destination: ${localPath}`);
 
+      const headResponse = await fetch(url, {
+        method: "HEAD",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; MLX-Download/1.0)",
+        },
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!headResponse.ok) {
+        console.error(
+          `[ModelDownloadService] File not accessible: ${filePath} (HTTP ${headResponse.status})`,
+        );
+        if (headResponse.status === 404) {
+          console.error(
+            `[ModelDownloadService] File does not exist in repo: ${repoId}/${filePath}`,
+          );
+        }
+        return false;
+      }
+
       const callback = (downloadProgress: FileSystem.DownloadProgressData) => {
         if (onProgress) {
           onProgress(downloadProgress.totalBytesWritten);
@@ -220,7 +243,7 @@ export class ModelDownloadService {
         {
           headers: {
             Accept: "*/*",
-            "User-Agent": "Mozilla/5.0",
+            "User-Agent": "Mozilla/5.0 (compatible; MLX-Download/1.0)",
           },
         },
         callback,
@@ -247,6 +270,11 @@ export class ModelDownloadService {
           "[ModelDownloadService] Download failed with status:",
           result?.status,
         );
+        if (result?.status === 404) {
+          console.error(
+            `[ModelDownloadService] 404 Not Found - verify repo exists: https://huggingface.co/${repoId}`,
+          );
+        }
         return false;
       }
     } catch (error) {
@@ -256,7 +284,9 @@ export class ModelDownloadService {
       );
       if (error instanceof Error) {
         console.error("[ModelDownloadService] Error:", error.message);
-        console.error("[ModelDownloadService] Stack:", error.stack);
+        if (error.name === "AbortError" || error.message.includes("timeout")) {
+          console.error("[ModelDownloadService] Request timed out - check network connection");
+        }
       }
       return false;
     }
@@ -315,13 +345,28 @@ export class ModelDownloadService {
         return false;
       }
 
-      const files = await this.fetchHuggingFaceRepoFiles(
-        model.huggingFaceRepo,
-        modelFormat,
-      );
+      console.log(`[ModelDownloadService] Fetching files from: https://huggingface.co/${model.huggingFaceRepo}`);
+
+      let files: HuggingFaceFile[];
+      try {
+        files = await this.fetchHuggingFaceRepoFiles(
+          model.huggingFaceRepo,
+          modelFormat,
+        );
+      } catch (fetchError) {
+        console.error("[ModelDownloadService] Failed to fetch repository files:", fetchError);
+        if (fetchError instanceof Error && fetchError.message.includes("404")) {
+          console.error(`[ModelDownloadService] Repository not found: ${model.huggingFaceRepo}`);
+          console.error("[ModelDownloadService] Please verify the repository exists at:");
+          console.error(`  https://huggingface.co/${model.huggingFaceRepo}`);
+        }
+        return false;
+      }
 
       if (files.length === 0) {
-        console.error("[ModelDownloadService] No files found in repository");
+        console.error("[ModelDownloadService] No compatible files found in repository");
+        console.error(`[ModelDownloadService] Expected format: ${modelFormat}`);
+        console.error("[ModelDownloadService] Verify the repository contains MLX or CoreML model files");
         return false;
       }
 
