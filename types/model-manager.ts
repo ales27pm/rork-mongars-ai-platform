@@ -11,6 +11,7 @@ export interface LLMModel {
   contextLength: number;
   downloadUrl?: string;
   huggingFaceRepo?: string;
+  huggingFaceSubpath?: string;
   localPath?: string;
   isDownloaded: boolean;
   isLoaded: boolean;
@@ -95,11 +96,107 @@ export interface HuggingFaceRepo {
 
 export const AVAILABLE_MODELS: LLMModel[] = [
   {
+    id: "dolphin-3.0-llama-3b-int4-coreml",
+    name: "dolphin-3.0-llama-3b-int4-coreml",
+    displayName: "Dolphin 3.0 Llama 3B (INT4 CoreML)",
+    description:
+      "Dolphin 3.0 fine-tuned on Llama 3.2 3B with INT4 quantization - CoreML optimized for iOS",
+    size: 2.0 * 1024 * 1024 * 1024,
+    sizeFormatted: "~2.0 GB",
+    format: "coreml",
+    quantization: "int4",
+    parameters: "3B",
+    contextLength: 131072,
+    huggingFaceRepo: "ales27pm/Dolphin3.0-CoreML",
+    huggingFaceSubpath: "Dolphin3.0-Llama3.2-3B-int4-lut.mlpackage",
+    isDownloaded: false,
+    isLoaded: false,
+    isDownloading: false,
+    downloadProgress: 0,
+    capabilities: [
+      { type: "chat", enabled: true },
+      { type: "completion", enabled: true },
+      { type: "generation", enabled: true },
+      { type: "embedding", enabled: true },
+    ],
+    metadata: {
+      version: "3.0",
+      author: "ales27pm / Cognitive Computations",
+      license: "Apache 2.0",
+      baseModel: "Llama 3.2 3B",
+      lastUpdated: "2024-12-15",
+    },
+  },
+  {
+    id: "dolphin-3.0-llama-3b-int8-coreml",
+    name: "dolphin-3.0-llama-3b-int8-coreml",
+    displayName: "Dolphin 3.0 Llama 3B (INT8 CoreML)",
+    description:
+      "Dolphin 3.0 fine-tuned on Llama 3.2 3B with INT8 quantization - higher quality CoreML for iOS",
+    size: 3.5 * 1024 * 1024 * 1024,
+    sizeFormatted: "~3.5 GB",
+    format: "coreml",
+    quantization: "int8",
+    parameters: "3B",
+    contextLength: 131072,
+    huggingFaceRepo: "ales27pm/Dolphin3.0-CoreML",
+    huggingFaceSubpath: "Dolphin3.0-Llama3.2-3B-int8.mlpackage",
+    isDownloaded: false,
+    isLoaded: false,
+    isDownloading: false,
+    downloadProgress: 0,
+    capabilities: [
+      { type: "chat", enabled: true },
+      { type: "completion", enabled: true },
+      { type: "generation", enabled: true },
+      { type: "embedding", enabled: true },
+    ],
+    metadata: {
+      version: "3.0",
+      author: "ales27pm / Cognitive Computations",
+      license: "Apache 2.0",
+      baseModel: "Llama 3.2 3B",
+      lastUpdated: "2024-12-15",
+    },
+  },
+  {
+    id: "dolphin-3.0-llama-3b-fp16-coreml",
+    name: "dolphin-3.0-llama-3b-fp16-coreml",
+    displayName: "Dolphin 3.0 Llama 3B (FP16 CoreML)",
+    description:
+      "Dolphin 3.0 fine-tuned on Llama 3.2 3B with FP16 precision - full quality CoreML for iOS",
+    size: 6.5 * 1024 * 1024 * 1024,
+    sizeFormatted: "~6.5 GB",
+    format: "coreml",
+    quantization: "float16",
+    parameters: "3B",
+    contextLength: 131072,
+    huggingFaceRepo: "ales27pm/Dolphin3.0-CoreML",
+    huggingFaceSubpath: "Dolphin3.0-Llama3.2-3B-fp16.mlpackage",
+    isDownloaded: false,
+    isLoaded: false,
+    isDownloading: false,
+    downloadProgress: 0,
+    capabilities: [
+      { type: "chat", enabled: true },
+      { type: "completion", enabled: true },
+      { type: "generation", enabled: true },
+      { type: "embedding", enabled: true },
+    ],
+    metadata: {
+      version: "3.0",
+      author: "ales27pm / Cognitive Computations",
+      license: "Apache 2.0",
+      baseModel: "Llama 3.2 3B",
+      lastUpdated: "2024-12-15",
+    },
+  },
+  {
     id: "dolphin-3.0-llama-3b-4bit",
     name: "dolphin-3.0-llama-3b-4bit",
-    displayName: "Dolphin 3.0 Llama 3B (4-bit)",
+    displayName: "Dolphin 3.0 Llama 3B (4-bit MLX)",
     description:
-      "Dolphin 3.0 fine-tuned on Llama 3.2 3B with 4-bit quantization - uncensored conversational AI optimized for mobile",
+      "Dolphin 3.0 fine-tuned on Llama 3.2 3B with 4-bit quantization - MLX format for Apple Silicon",
     size: 2.0 * 1024 * 1024 * 1024,
     sizeFormatted: "2.0 GB",
     format: "mlx",

@@ -76,11 +76,15 @@ export class ModelDownloadService {
     repoId: string,
     format: ModelDownloadFormat,
     token?: string,
+    subpath?: string,
   ): Promise<HuggingFaceFile[]> {
     console.log(
       "[ModelDownloadService] Fetching repository structure:",
       repoId,
     );
+    if (subpath) {
+      console.log("[ModelDownloadService] Filtering by subpath:", subpath);
+    }
 
     try {
       const repoFiles = await listRepoFiles({
@@ -89,7 +93,14 @@ export class ModelDownloadService {
         accessToken: token,
       });
 
-      const files = repoFiles
+      let filteredFiles = repoFiles;
+      
+      if (subpath) {
+        filteredFiles = repoFiles.filter((path) => path.startsWith(subpath));
+        console.log(`[ModelDownloadService] Found ${filteredFiles.length} files in subpath ${subpath}`);
+      }
+
+      const files = filteredFiles
         .filter((path) =>
           format === "mlx" ? this.isMLXFile(path) : this.isCoreMLFile(path),
         )
@@ -347,11 +358,16 @@ export class ModelDownloadService {
 
       console.log(`[ModelDownloadService] Fetching files from: https://huggingface.co/${model.huggingFaceRepo}`);
 
+      const knownModel = AVAILABLE_MODELS.find((m) => m.id === model.id);
+      const subpath = knownModel?.huggingFaceSubpath;
+
       let files: HuggingFaceFile[];
       try {
         files = await this.fetchHuggingFaceRepoFiles(
           model.huggingFaceRepo,
           modelFormat,
+          undefined,
+          subpath,
         );
       } catch (fetchError) {
         console.error("[ModelDownloadService] Failed to fetch repository files:", fetchError);
