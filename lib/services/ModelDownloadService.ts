@@ -96,7 +96,8 @@ export class ModelDownloadService {
       let filteredFiles = repoFiles;
       
       if (subpath) {
-        filteredFiles = repoFiles.filter((path) => path.startsWith(subpath));
+        const subpathPrefix = subpath.endsWith('/') ? subpath : `${subpath}/`;
+        filteredFiles = repoFiles.filter((path) => path.startsWith(subpathPrefix));
         console.log(`[ModelDownloadService] Found ${filteredFiles.length} files in subpath ${subpath}`);
       }
 
@@ -159,13 +160,11 @@ export class ModelDownloadService {
   }
 
   private isCoreMLFile(path: string): boolean {
-    if (path.includes(".mlpackage/") || path.endsWith(".mlpackage")) {
+    // Must be a file INSIDE a .mlpackage directory, not the directory itself
+    if (path.includes(".mlpackage/")) {
       return true;
     }
     if (path.endsWith(".mlmodel")) {
-      return true;
-    }
-    if (path.includes(".mlpackage") && (path.endsWith("Manifest.json") || path.endsWith(".bin"))) {
       return true;
     }
     return false;
