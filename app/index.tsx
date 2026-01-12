@@ -1,5 +1,5 @@
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { Redirect } from 'expo-router';
+import { Redirect, Href } from 'expo-router';
 import { useAuth } from '@/lib/providers/auth';
 
 export default function Index() {
@@ -14,10 +14,10 @@ export default function Index() {
   }
 
   if (!signedIn) {
-    return <Redirect href="/(auth)/login" />;
+    return <Redirect href={"/(auth)/login" as Href} />;
   }
 
-  return <Redirect href="/(tabs)/chat" />;
+  return <Redirect href={"/(tabs)/chat" as Href} />;
 }
 
 const styles = StyleSheet.create({

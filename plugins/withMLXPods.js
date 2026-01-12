@@ -182,13 +182,6 @@ function injectAfterLine(podfile, regex, injection) {
   return podfile.slice(0, idx) + injection + podfile.slice(idx);
 }
 
-function injectBeforeLine(podfile, regex, injection) {
-  const match = podfile.match(regex);
-  if (!match) return podfile;
-  const idx = match.index;
-  return podfile.slice(0, idx) + injection + podfile.slice(idx);
-}
-
 function ensurePostInstallBlock(podfile) {
   if (/post_install do \|installer\|/.test(podfile)) return podfile;
 
@@ -206,11 +199,6 @@ function ensureMLXPods(podfile) {
   let updated = podfile;
 
   updated = updated.replace(/^spm_pkg.*mlx-swift.*$/gm, SPM_PKG);
-
-  // Ensure cocoapods-spm plugin line exists (near the top is fine).
-  function ensurePostInstallBlock(podfile) {
-    if (/post_install\s+do\s+\|installer\|/.test(podfile)) return podfile;
-
 
   // Ensure the MLX SPM package declaration exists.
   if (!updated.includes(SPM_PKG)) {
