@@ -24,6 +24,7 @@ import {
 } from "lucide-react-native";
 import { useCognition } from "@/lib/providers/cognition";
 import { useHippocampus } from "@/lib/providers/hippocampus";
+import { useModelManager } from "@/lib/providers/model-manager";
 import { useMicrophone } from "@/lib/hooks/useMicrophone";
 import type { Message } from "@/types";
 import type { ReflectionResult } from "@/types/introspection";
@@ -32,6 +33,7 @@ import { format } from "date-fns";
 export default function ChatScreen() {
   const cognition = useCognition();
   const hippocampus = useHippocampus();
+  const modelManager = useModelManager();
   const [input, setInput] = useState("");
   const [streamingText, setStreamingText] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -50,6 +52,7 @@ export default function ChatScreen() {
   } = useMicrophone();
 
   const messages = hippocampus.shortTermMemory;
+  const hasLoadedModel = modelManager.loadedModelId != null;
 
   const detectIntrospectionCommand = useCallback(
     (
@@ -473,6 +476,15 @@ export default function ChatScreen() {
           </View>
         )}
 
+        {!hasLoadedModel && (
+          <View style={styles.noModelBanner}>
+            <Brain size={18} color="#f59e0b" />
+            <Text style={styles.noModelText}>
+              No local model loaded. Go to Models tab to download and load a model.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.inputContainer}>
           <TouchableOpacity
             style={styles.pasteButton}
@@ -508,19 +520,19 @@ export default function ChatScreen() {
             style={styles.input}
             value={input}
             onChangeText={setInput}
-            placeholder="Ask monGARS anything..."
+            placeholder={hasLoadedModel ? "Ask monGARS anything..." : "Load a model first..."}
             placeholderTextColor="#64748b"
             multiline
             maxLength={500}
-            editable={!cognition.isGenerating}
+            editable={!cognition.isGenerating && hasLoadedModel}
           />
           <TouchableOpacity
             style={[
               styles.sendButton,
-              cognition.isGenerating && styles.sendButtonDisabled,
+              (cognition.isGenerating || !hasLoadedModel) && styles.sendButtonDisabled,
             ]}
             onPress={handleSend}
-            disabled={cognition.isGenerating || !input.trim()}
+            disabled={cognition.isGenerating || !input.trim() || !hasLoadedModel}
           >
             {cognition.isGenerating ? (
               <ActivityIndicator size="small" color="#fff" />
@@ -706,5 +718,22 @@ const styles = StyleSheet.create({
   transcribingText: {
     fontSize: 14,
     color: "#94a3b8",
+  },
+  noModelBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#78350f",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 10,
+    gap: 10,
+  },
+  noModelText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#fef3c7",
+    lineHeight: 18,
   },
 });

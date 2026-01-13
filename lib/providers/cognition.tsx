@@ -13,7 +13,7 @@ import { useLocation } from "./location";
 import { useCamera } from "./camera";
 import { useContacts } from "./contacts";
 import { useModelManager } from "./model-manager";
-import { generateText } from "@rork-ai/toolkit-sdk";
+
 import { dolphinCoreML } from "@/lib/modules/DolphinCoreML";
 import {
   cosineSimilarity,
@@ -423,26 +423,13 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
             });
             inferenceSource = "local";
             console.log("[Cognition] Local model response received:", response.substring(0, 100));
-            
-            if (response.includes("simulated response") || 
-                response.includes("Fallback mode") || 
-                response.includes("Placeholder response")) {
-              console.log("[Cognition] Detected fallback/placeholder response, using cloud API instead");
-              response = await generateText({
-                messages: [{ role: "user", content: contextPrompt }],
-              });
-            }
           } catch (localError) {
-            console.error("[Cognition] Local model generation failed, falling back to cloud:", localError);
-            response = await generateText({
-              messages: [{ role: "user", content: contextPrompt }],
-            });
+            console.error("[Cognition] Local model generation failed:", localError);
+            throw localError;
           }
         } else {
-          console.log("[Cognition] No local model loaded, using cloud API");
-          response = await generateText({
-            messages: [{ role: "user", content: contextPrompt }],
-          });
+          console.error("[Cognition] No local model loaded - cannot generate response");
+          throw new Error("No local model loaded. Please download and load a model from the Models tab.");
         }
         
         telemetry.endTimer("llm_inference", { source: inferenceSource });

@@ -67,17 +67,50 @@ interface DolphinCoreMLNativeModule {
 }
 
 class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
+  private modelLoaded = false;
+  private modelName: string | null = null;
+
   async initialize(config: ModelConfig) {
     console.log('[DolphinCoreML Fallback] Initializing with config:', config);
+    
+    if (Platform.OS === 'web') {
+      console.error('[DolphinCoreML] Local models are not supported on web platform');
+      return {
+        success: false,
+        error: {
+          code: 'PLATFORM_NOT_SUPPORTED',
+          message: 'Local model inference is only available on iOS devices. Web platform is not supported.'
+        },
+        metadata: {
+          modelName: config.modelName || 'Dolphin',
+          version: '1.0.0-fallback',
+          loadTime: 0
+        },
+        deviceInfo: {
+          deviceModel: 'Web Browser',
+          systemVersion: Platform.Version.toString(),
+          processorCount: 4,
+          physicalMemory: 4294967296,
+          thermalState: 0,
+          isLowPowerModeEnabled: false
+        }
+      };
+    }
+
+    console.error('[DolphinCoreML] Native module not available - running in fallback mode');
     return {
-      success: true,
+      success: false,
+      error: {
+        code: 'NATIVE_MODULE_NOT_FOUND',
+        message: 'DolphinCoreML native module not found. Please build and deploy to an iOS device.'
+      },
       metadata: {
         modelName: config.modelName || 'Dolphin',
         version: '1.0.0-fallback',
-        loadTime: 0.1
+        loadTime: 0
       },
       deviceInfo: {
-        deviceModel: Platform.OS === 'web' ? 'Web Browser' : 'Fallback',
+        deviceModel: 'Fallback',
         systemVersion: Platform.Version.toString(),
         processorCount: 4,
         physicalMemory: 4294967296,
@@ -89,6 +122,11 @@ class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
 
   async encodeBatch(texts: string[], options?: EncodingOptions) {
     console.log('[DolphinCoreML Fallback] Encoding batch:', texts.length, 'texts');
+    
+    if (Platform.OS === 'web') {
+      console.warn('[DolphinCoreML] Using deterministic embeddings on web (not real model)');
+    }
+    
     const dimension = 384;
     
     return texts.map(text => {
@@ -115,30 +153,29 @@ class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
     });
   }
 
-  async generateStream(prompt: string, params?: GenerationParameters) {
-    console.log('[DolphinCoreML Fallback] Generating for prompt:', prompt.substring(0, 50));
+  async generateStream(prompt: string, params?: GenerationParameters): Promise<string> {
+    console.error('[DolphinCoreML Fallback] Generation requested but native module not available');
+    console.error('[DolphinCoreML Fallback] Prompt:', prompt.substring(0, 100));
     
-    const responses = [
-      'This is a simulated response. For real generation, please use the iOS native module.',
-      'Fallback mode active. Real AI generation requires native implementation.',
-      'Placeholder response generated. Deploy to iOS device for actual AI inference.',
-    ];
+    if (Platform.OS === 'web') {
+      throw new Error('LOCAL_MODEL_NOT_AVAILABLE: Local model inference is only available on iOS devices. Please use the iOS app to run local models.');
+    }
     
-    return responses[Math.floor(Math.random() * responses.length)];
+    throw new Error('NATIVE_MODULE_NOT_FOUND: DolphinCoreML native module not available. Please build and deploy to an iOS device with the native module installed.');
   }
 
   async getMetrics() {
     return {
       encoding: {
-        average: 12.5,
-        median: 11.2,
-        p95: 18.3,
+        average: 0,
+        median: 0,
+        p95: 0,
         count: 0
       },
       generation: {
-        average: 50.2,
-        median: 48.5,
-        p95: 65.1,
+        average: 0,
+        median: 0,
+        p95: 0,
         count: 0
       },
       totalInferences: 0,
@@ -148,6 +185,8 @@ class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
   }
 
   async unloadModel() {
+    this.modelLoaded = false;
+    this.modelName = null;
     return true;
   }
 }
