@@ -284,7 +284,7 @@ public class DolphinCoreMLModule: Module {
       
       for iteration in 0..<maxTokens {
         let inputFeatures = try createModelInput(tokenIds: currentTokenIds)
-        let output = try model.prediction(from: inputFeatures)
+        let output = try await model.prediction(from: inputFeatures)
         
         let logits = try extractLogits(from: output)
         let nextTokenId = try sampleToken(logits: logits, temperature: temperature, topP: topP)
@@ -355,7 +355,7 @@ public class DolphinCoreMLModule: Module {
           continue
         }
         
-        let output = try model.prediction(from: inputFeatures)
+        let output = try await model.prediction(from: inputFeatures)
         
         if let embeddingFeature = output.featureValue(for: modelDescription),
            let embeddingArray = embeddingFeature.multiArrayValue {
@@ -400,7 +400,7 @@ public class DolphinCoreMLModule: Module {
       preparedText = text
     }
 
-    if let embedding = NLEmbedding.wordEmbedding(forLanguage: .english) {
+    if let embedding = NLEmbedding.wordEmbedding(for: .english) {
       let tokens = preparedText.split(separator: " ").map(String.init)
       let vectors = tokens.compactMap { embedding.vector(for: $0) }
       if let first = vectors.first {
@@ -510,7 +510,7 @@ public class DolphinCoreMLModule: Module {
     let sumExp = expLogits.reduce(0, +)
     let probs = expLogits.map { $0 / sumExp }
     
-    var sortedIndices = probs.enumerated().sorted { $0.element > $1.element }
+    let sortedIndices = probs.enumerated().sorted { $0.element > $1.element }
     
     var cumulativeProb: Float = 0.0
     var topPIndices: [(offset: Int, element: Float)] = []
