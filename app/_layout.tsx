@@ -19,6 +19,7 @@ import { ContactsProvider } from "@/lib/providers/contacts";
 import { CalendarProvider } from "@/lib/providers/calendar";
 import { LocationProvider } from "@/lib/providers/location";
 import { CameraProvider } from "@/lib/providers/camera";
+import { WebScraperProvider } from "@/lib/providers/web-scraper";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -60,9 +61,11 @@ export default function RootLayout() {
                               startTime={Date.now()}
                             >
                               <SommeilProvider>
-                                <CognitionProvider>
-                                  <RootLayoutNav />
-                                </CognitionProvider>
+                                <WebScraperProvider>
+                                  <CognitionProvider>
+                                    <RootLayoutNav />
+                                  </CognitionProvider>
+                                </WebScraperProvider>
                               </SommeilProvider>
                             </IntrospectionAPIProvider>
                           </SelfModelProvider>

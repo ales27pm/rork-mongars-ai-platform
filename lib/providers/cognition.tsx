@@ -12,6 +12,7 @@ import { useCalendar } from "./calendar";
 import { useLocation } from "./location";
 import { useCamera } from "./camera";
 import { useContacts } from "./contacts";
+import { useWebScraper } from "./web-scraper";
 import { useModelManager } from "./model-manager";
 
 import { dolphinCoreML } from "@/lib/modules/DolphinCoreML";
@@ -55,6 +56,7 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
   const camera = useCamera();
   const contacts = useContacts();
   const modelManager = useModelManager();
+  const webScraper = useWebScraper();
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastSource, setLastSource] = useState<"local" | "cached">("local");
   const [reasoningTrace, setReasoningTrace] = useState<ReasoningTrace[]>([]);
@@ -361,6 +363,10 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
       if (camera.cameraSharingAllowed && camera.cameraPermissionStatus === "granted") {
         availableTools.push("capture_image(source?: 'camera' | 'library') - Capture or select an image");
       }
+      if (webScraper.webBrowsingEnabled) {
+        availableTools.push("web_search(query: string) - Search the internet for information");
+        availableTools.push("fetch_page(url: string) - Fetch and read content from a specific URL");
+      }
       
       const toolsContext = availableTools.length > 0
         ? [
@@ -602,8 +608,40 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
       location.locationSharingAllowed,
       location.permissionStatus,
       modelManager,
+      webScraper.webBrowsingEnabled,
     ],
   );
+
+  const performWebSearch = useCallback(async (query: string) => {
+    if (!webScraper.webBrowsingEnabled) {
+      return { success: false, error: 'Web browsing is disabled' };
+    }
+    console.log(`[Cognition] Performing web search: "${query}"`);
+    const result = await webScraper.searchAndSummarize(query);
+    return {
+      success: true,
+      query: result.query,
+      summary: result.summary,
+      sources: result.sources,
+      resultCount: result.results.length,
+    };
+  }, [webScraper]);
+
+  const fetchWebPage = useCallback(async (url: string) => {
+    if (!webScraper.webBrowsingEnabled) {
+      return { success: false, error: 'Web browsing is disabled' };
+    }
+    console.log(`[Cognition] Fetching web page: ${url}`);
+    const content = await webScraper.fetchPage(url);
+    return {
+      success: content.success,
+      title: content.title,
+      excerpt: content.excerpt,
+      content: content.content.substring(0, 5000),
+      url: content.url,
+      error: content.error,
+    };
+  }, [webScraper]);
 
   const clearReasoningTrace = useCallback(() => {
     setReasoningTrace([]);
@@ -728,5 +766,8 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
     getProtoMetrics,
     getEmergenceStatus,
     getMetaReflection,
+    performWebSearch,
+    fetchWebPage,
+    isWebBrowsingEnabled: webScraper.webBrowsingEnabled,
   };
 });
