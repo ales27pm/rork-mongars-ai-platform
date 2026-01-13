@@ -341,7 +341,7 @@ function DownloadProgressDisplay({ progress }: { progress: DownloadProgress }) {
           <Text style={styles.progressPercentage}>
             {progress.percentage.toFixed(1)}%
           </Text>
-          {progress.totalFiles && progress.currentFileIndex && (
+          {progress.totalFiles != null && progress.totalFiles > 0 && progress.currentFileIndex != null && (
             <Text style={styles.progressFileCount}>
               File {progress.currentFileIndex}/{progress.totalFiles}
             </Text>
@@ -349,16 +349,16 @@ function DownloadProgressDisplay({ progress }: { progress: DownloadProgress }) {
         </View>
         
         <View style={styles.progressMeta}>
-          {progress.speed > 0 && (
+          {progress.speed != null && progress.speed > 0 ? (
             <Text style={styles.progressSpeed}>
               {modelDownloadService.formatSpeed(progress.speed)}
             </Text>
-          )}
-          {progress.estimatedTimeRemaining > 0 && progress.status === "downloading" && (
+          ) : null}
+          {progress.estimatedTimeRemaining != null && progress.estimatedTimeRemaining > 0 && progress.status === "downloading" ? (
             <Text style={styles.progressEta}>
               ETA: {modelDownloadService.formatTime(progress.estimatedTimeRemaining)}
             </Text>
-          )}
+          ) : null}
         </View>
       </View>
 
@@ -371,11 +371,11 @@ function DownloadProgressDisplay({ progress }: { progress: DownloadProgress }) {
         </View>
       )}
 
-      {progress.bytesDownloaded > 0 && (
+      {progress.bytesDownloaded != null && progress.bytesDownloaded > 0 ? (
         <Text style={styles.progressBytes}>
           {modelDownloadService.formatBytes(progress.bytesDownloaded)} / {modelDownloadService.formatBytes(progress.totalBytes)}
         </Text>
-      )}
+      ) : null}
 
       {progress.error && (
         <View style={styles.errorContainer}>
