@@ -68,9 +68,18 @@ export class LocalModelManager {
         return true;
       }
 
+      console.log('[LocalModelManager] Native module not available - requires custom iOS build');
       return false;
-    } catch (error) {
-      console.error('[LocalModelManager] Initialization failed:', error);
+    } catch (error: any) {
+      const isExpectedError = error?.message?.includes('PLATFORM_NOT_SUPPORTED') || 
+                              error?.message?.includes('NATIVE_MODULE_NOT_FOUND') ||
+                              error?.message?.includes('REQUIRES_NATIVE_BUILD');
+      
+      if (isExpectedError) {
+        console.log('[LocalModelManager] Native module unavailable - this is expected in Expo Go/web preview');
+      } else {
+        console.error('[LocalModelManager] Initialization failed:', error);
+      }
       return false;
     }
   }

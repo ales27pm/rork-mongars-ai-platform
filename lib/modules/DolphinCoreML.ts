@@ -69,17 +69,20 @@ interface DolphinCoreMLNativeModule {
 class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
   private modelLoaded = false;
   private modelName: string | null = null;
+  private hasLoggedFallback = false;
 
   async initialize(config: ModelConfig) {
-    console.log('[DolphinCoreML Fallback] Initializing with config:', config);
+    if (!this.hasLoggedFallback) {
+      console.log('[DolphinCoreML] Running in fallback mode - native module requires iOS device with custom build');
+      this.hasLoggedFallback = true;
+    }
     
     if (Platform.OS === 'web') {
-      console.error('[DolphinCoreML] Local models are not supported on web platform');
       return {
         success: false,
         error: {
           code: 'PLATFORM_NOT_SUPPORTED',
-          message: 'Local model inference is only available on iOS devices. Web platform is not supported.'
+          message: 'Local model inference requires iOS device with custom build. Use "Build for iOS" to create native app.'
         },
         metadata: {
           modelName: config.modelName || 'Dolphin',
@@ -97,12 +100,11 @@ class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
       };
     }
 
-    console.error('[DolphinCoreML] Native module not available - running in fallback mode');
     return {
       success: false,
       error: {
         code: 'NATIVE_MODULE_NOT_FOUND',
-        message: 'DolphinCoreML native module not found. Please build and deploy to an iOS device.'
+        message: 'Native module requires custom iOS build. Run "eas build" to create development build.'
       },
       metadata: {
         modelName: config.modelName || 'Dolphin',
@@ -110,7 +112,7 @@ class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
         loadTime: 0
       },
       deviceInfo: {
-        deviceModel: 'Fallback',
+        deviceModel: 'Expo Go',
         systemVersion: Platform.Version.toString(),
         processorCount: 4,
         physicalMemory: 4294967296,
@@ -154,14 +156,13 @@ class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
   }
 
   async generateStream(prompt: string, params?: GenerationParameters): Promise<string> {
-    console.error('[DolphinCoreML Fallback] Generation requested but native module not available');
-    console.error('[DolphinCoreML Fallback] Prompt:', prompt.substring(0, 100));
+    console.log('[DolphinCoreML] Generation requested - native module required');
     
-    if (Platform.OS === 'web') {
-      throw new Error('LOCAL_MODEL_NOT_AVAILABLE: Local model inference is only available on iOS devices. Please use the iOS app to run local models.');
-    }
+    const errorMessage = Platform.OS === 'web' 
+      ? 'REQUIRES_NATIVE_BUILD: Local LLM inference requires iOS device with custom build. Build the app using "eas build" and install on device.'
+      : 'REQUIRES_NATIVE_BUILD: Native module not available in Expo Go. Create a development build using "eas build --profile development".'
     
-    throw new Error('NATIVE_MODULE_NOT_FOUND: DolphinCoreML native module not available. Please build and deploy to an iOS device with the native module installed.');
+    throw new Error(errorMessage);
   }
 
   async getMetrics() {
