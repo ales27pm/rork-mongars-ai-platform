@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "monGARS",
-    "slug": "mongars",
+    "slug": "rork-mongars",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.27pm.monGARS",
+      "bundleIdentifier": "com.rork.mongars",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio",
