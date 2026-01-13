@@ -38,10 +38,10 @@
   "submit": {
     "production": {
       "ios": {
-        "ascAppId": "REPLACE_WITH_ASC_APP_ID",
-        "ascApiKeyPath": "credentials/ios/appstoreconnect.p8",
-        "ascApiKeyIssuerId": "REPLACE_WITH_ASC_API_KEY_ISSUER_ID",
-        "ascApiKeyId": "REPLACE_WITH_ASC_API_KEY_ID"
+        "ascAppId": "6757726515",
+        "ascApiKeyPath": "credentials/ios/AuthKey_8H354F29PN.p8",
+        "ascApiKeyIssuerId": "d420c56f-7a3f-441b-a7ee-21130d786727",
+        "ascApiKeyId": "K8898F66W2"
       }
     }
   }
