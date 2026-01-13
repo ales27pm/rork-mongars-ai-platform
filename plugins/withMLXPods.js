@@ -18,7 +18,9 @@ const SPM_LINES = [
 const ensureMLXPods = (podfile) => {
   const hasAllSpmLines = SPM_LINES.every((line) => podfile.includes(line));
   const hasRequireBlock = podfile.includes("require 'cocoapods-spm'");
-  if (hasRequireBlock && podfile.includes(PLUGIN_LINE) && hasAllSpmLines) {
+  const localPodLine = `pod 'DolphinCoreML', :path => '../modules/dolphin-core-ml/ios'`;
+  const hasLocalPod = podfile.includes(localPodLine);
+  if (hasRequireBlock && podfile.includes(PLUGIN_LINE) && hasAllSpmLines && hasLocalPod) {
     return podfile;
   }
 
@@ -36,10 +38,24 @@ const ensureMLXPods = (podfile) => {
     }
   }
 
+  // Add SPM block
   const podsBlock = `if defined?(spm_pkg)\n${SPM_LINES.join("\n")}\nend`;
   const hasSpmBlockAlready =
     SPM_LINES.some((line) => updatedPodfile.includes(line)) ||
     updatedPodfile.includes('spm_pkg "mlx-swift"');
+
+  // Add local pod for DolphinCoreML after use_expo_modules! or use_react_native!
+  function addLocalPodBlock(str) {
+    if (str.includes(localPodLine)) return str;
+    const regex = /(use_expo_modules!|use_react_native!)/;
+    if (regex.test(str)) {
+      return str.replace(regex, `$1\n${localPodLine}`);
+    }
+    // fallback: add to top of file
+    return `${localPodLine}\n${str}`;
+  }
+
+  updatedPodfile = addLocalPodBlock(updatedPodfile);
 
   if (!hasSpmBlockAlready && updatedPodfile.includes("use_expo_modules!")) {
     return updatedPodfile.replace(

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
+import { setupTracing } from "@/lib/utils/tracing";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { InstrumentationProvider } from "@/lib/providers/instrumentation";
 import { TelemetryProvider } from "@/lib/providers/telemetry";
@@ -36,6 +37,7 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   useEffect(() => {
+    setupTracing();
     SplashScreen.hideAsync();
   }, []);
 

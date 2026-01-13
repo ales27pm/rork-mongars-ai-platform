@@ -6,6 +6,26 @@ This project implements a production-ready React Native Expo application with iO
 
 ## 📋 Implemented Components
 
+## ⚠️ iOS Local Pod Troubleshooting
+
+If you encounter build errors like `no such module 'DolphinCoreML'` during iOS native builds:
+
+1. Ensure the ios directory exists (run `npx expo prebuild --platform ios` if missing).
+2. The Podfile should include:
+  ```ruby
+  pod 'DolphinCoreML', :path => '../modules/dolphin-core-ml/ios'
+  ```
+  This is automatically injected by the custom Expo config plugin (`plugins/withMLXPods.js`).
+3. On macOS, run:
+  ```sh
+  cd ios && pod install
+  ```
+  If you are not on macOS, you must run this step on a Mac or CI service that supports CocoaPods.
+4. If you update the native module, always re-run `pod install` after prebuild.
+5. For EAS Build, ensure your custom plugin and local podspec are committed and referenced correctly.
+
+If issues persist, see the Expo and CocoaPods documentation for troubleshooting native module linking.
+
 ### 1. Core Infrastructure
 
 #### **Expo Config Plugin** (`plugins/withCoreMLModel.js`)

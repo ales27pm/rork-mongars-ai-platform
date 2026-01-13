@@ -9,11 +9,15 @@
     "eas-build-pre-install": "bash ./scripts/eas-pre-install.sh",
     "lint": "expo lint",
     "test": "jest --runInBand",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@nkzw/create-context-hook": "^1.1.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-web": "^2.3.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@rork-ai/toolkit-sdk": "^0.2.51",
     "@stardazed/streams-text-encoding": "^1.0.2",
