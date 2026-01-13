@@ -11,6 +11,7 @@ export interface Message {
     curiosityGap?: boolean;
     contextUsed?: string[];
     introspection?: boolean;
+    webSearch?: boolean;
     affectiveState?: any;
     curiosityMetrics?: any;
     mimicryMetrics?: any;

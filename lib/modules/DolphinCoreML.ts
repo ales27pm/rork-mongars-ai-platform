@@ -1,7 +1,8 @@
-import { Platform, NativeModules } from 'react-native';
+import { Platform } from 'react-native';
 
 export interface ModelConfig {
   modelName?: string;
+  modelPath?: string;
   enableEncryption?: boolean;
   maxBatchSize?: number;
   computeUnits?: 'all' | 'cpuAndGPU' | 'cpuOnly';
@@ -66,18 +67,81 @@ interface DolphinCoreMLNativeModule {
   unloadModel(): Promise<boolean>;
 }
 
+let cachedNativeModule: DolphinCoreMLNativeModule | null = null;
+let nativeModuleLoaded = false;
+
+const loadNativeModule = async (): Promise<DolphinCoreMLNativeModule | null> => {
+  if (nativeModuleLoaded) {
+    return cachedNativeModule;
+  }
+  
+  if (Platform.OS !== 'ios') {
+    nativeModuleLoaded = true;
+    return null;
+  }
+  
+  try {
+    const module = await import('@/modules/dolphin-core-ml');
+    if (module?.default) {
+      cachedNativeModule = module.default as DolphinCoreMLNativeModule;
+      console.log('[DolphinCoreML] Native module loaded successfully');
+    }
+    nativeModuleLoaded = true;
+    return cachedNativeModule;
+  } catch (error) {
+    console.warn('[DolphinCoreML] Failed to load native module:', error);
+    nativeModuleLoaded = true;
+    return null;
+  }
+};
+
 class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
+  private modelLoaded = false;
+  private modelName: string | null = null;
+  private hasLoggedFallback = false;
+
   async initialize(config: ModelConfig) {
-    console.log('[DolphinCoreML Fallback] Initializing with config:', config);
+    if (!this.hasLoggedFallback) {
+      console.log('[DolphinCoreML] Running in fallback mode - native module requires iOS device with custom build');
+      this.hasLoggedFallback = true;
+    }
+    
+    if (Platform.OS === 'web') {
+      return {
+        success: false,
+        error: {
+          code: 'PLATFORM_NOT_SUPPORTED',
+          message: 'Local model inference requires iOS device with custom build. Use "Build for iOS" to create native app.'
+        },
+        metadata: {
+          modelName: config.modelName || 'Dolphin',
+          version: '1.0.0-fallback',
+          loadTime: 0
+        },
+        deviceInfo: {
+          deviceModel: 'Web Browser',
+          systemVersion: Platform.Version.toString(),
+          processorCount: 4,
+          physicalMemory: 4294967296,
+          thermalState: 0,
+          isLowPowerModeEnabled: false
+        }
+      };
+    }
+
     return {
-      success: true,
+      success: false,
+      error: {
+        code: 'NATIVE_MODULE_NOT_FOUND',
+        message: 'Native module requires custom iOS build. Run "eas build" to create development build.'
+      },
       metadata: {
         modelName: config.modelName || 'Dolphin',
         version: '1.0.0-fallback',
-        loadTime: 0.1
+        loadTime: 0
       },
       deviceInfo: {
-        deviceModel: Platform.OS === 'web' ? 'Web Browser' : 'Fallback',
+        deviceModel: 'Expo Go',
         systemVersion: Platform.Version.toString(),
         processorCount: 4,
         physicalMemory: 4294967296,
@@ -89,6 +153,11 @@ class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
 
   async encodeBatch(texts: string[], options?: EncodingOptions) {
     console.log('[DolphinCoreML Fallback] Encoding batch:', texts.length, 'texts');
+    
+    if (Platform.OS === 'web') {
+      console.warn('[DolphinCoreML] Using deterministic embeddings on web (not real model)');
+    }
+    
     const dimension = 384;
     
     return texts.map(text => {
@@ -115,30 +184,28 @@ class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
     });
   }
 
-  async generateStream(prompt: string, params?: GenerationParameters) {
-    console.log('[DolphinCoreML Fallback] Generating for prompt:', prompt.substring(0, 50));
+  async generateStream(prompt: string, params?: GenerationParameters): Promise<string> {
+    console.log('[DolphinCoreML] Generation requested - native module required');
     
-    const responses = [
-      'This is a simulated response. For real generation, please use the iOS native module.',
-      'Fallback mode active. Real AI generation requires native implementation.',
-      'Placeholder response generated. Deploy to iOS device for actual AI inference.',
-    ];
+    const errorMessage = Platform.OS === 'web' 
+      ? 'REQUIRES_NATIVE_BUILD: Local LLM inference requires iOS device with custom build. Build the app using "eas build" and install on device.'
+      : 'REQUIRES_NATIVE_BUILD: Native module not available in Expo Go. Create a development build using "eas build --profile development".'
     
-    return responses[Math.floor(Math.random() * responses.length)];
+    throw new Error(errorMessage);
   }
 
   async getMetrics() {
     return {
       encoding: {
-        average: 12.5,
-        median: 11.2,
-        p95: 18.3,
+        average: 0,
+        median: 0,
+        p95: 0,
         count: 0
       },
       generation: {
-        average: 50.2,
-        median: 48.5,
-        p95: 65.1,
+        average: 0,
+        median: 0,
+        p95: 0,
         count: 0
       },
       totalInferences: 0,
@@ -148,6 +215,8 @@ class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
   }
 
   async unloadModel() {
+    this.modelLoaded = false;
+    this.modelName = null;
     return true;
   }
 }
@@ -155,29 +224,34 @@ class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
 export class DolphinCoreML {
   private module: DolphinCoreMLNativeModule;
   private initialized = false;
+  private currentModelPath: string | null = null;
+  private moduleLoadPromise: Promise<void> | null = null;
   
   constructor() {
-    if (Platform.OS === 'ios') {
-      try {
-        const nativeModule = NativeModules.DolphinCoreML;
-        if (nativeModule) {
-          console.log('[DolphinCoreML] Using native iOS module');
-          this.module = nativeModule as DolphinCoreMLNativeModule;
-        } else {
-          console.warn('[DolphinCoreML] Native module not found, using fallback');
-          this.module = new DolphinCoreMLFallback();
-        }
-      } catch (error) {
-        console.warn('[DolphinCoreML] Failed to load native module, using fallback:', error);
-        this.module = new DolphinCoreMLFallback();
-      }
+    this.module = new DolphinCoreMLFallback();
+    this.moduleLoadPromise = this.loadModule();
+  }
+  
+  private async loadModule(): Promise<void> {
+    const nativeModule = await loadNativeModule();
+    if (nativeModule) {
+      console.log('[DolphinCoreML] Using native iOS module via Expo');
+      this.module = nativeModule;
     } else {
-      console.log('[DolphinCoreML] Non-iOS platform, using fallback');
-      this.module = new DolphinCoreMLFallback();
+      console.log('[DolphinCoreML] Native module not available, using fallback');
+    }
+  }
+  
+  private async ensureModuleLoaded(): Promise<void> {
+    if (this.moduleLoadPromise) {
+      await this.moduleLoadPromise;
+      this.moduleLoadPromise = null;
     }
   }
   
   async initialize(config: ModelConfig = {}) {
+    await this.ensureModuleLoaded();
+    
     const defaultConfig: ModelConfig = {
       modelName: 'Dolphin',
       enableEncryption: true,
@@ -187,6 +261,8 @@ export class DolphinCoreML {
     };
     
     try {
+      console.log('[DolphinCoreML] Initializing with config:', defaultConfig);
+      
       const result = await this.module.initialize(defaultConfig);
 
       if (!result.success) {
@@ -196,6 +272,8 @@ export class DolphinCoreML {
       }
 
       this.initialized = result.success;
+      this.currentModelPath = defaultConfig.modelPath || defaultConfig.modelName || null;
+      console.log('[DolphinCoreML] Initialization successful, model:', this.currentModelPath);
       return result;
     } catch (error) {
       console.error('[DolphinCoreML] Initialization failed:', error);

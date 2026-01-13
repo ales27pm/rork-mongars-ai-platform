@@ -6,6 +6,7 @@ export type HuggingFaceListRepoOptions = {
 
 type HuggingFaceRepoEntry = {
   path?: string;
+  type?: string;
 };
 
 const DEFAULT_REVISION = "main";
@@ -55,6 +56,7 @@ export const listRepoFiles = async ({
   }
 
   return data
+    .filter((entry) => entry.type === "file")
     .map((entry) => entry.path)
     .filter((path): path is string => typeof path === "string");
 };

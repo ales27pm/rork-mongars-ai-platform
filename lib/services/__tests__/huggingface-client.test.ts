@@ -21,8 +21,8 @@ describe("huggingface-client", () => {
     const mockJson = jest
       .fn()
       .mockResolvedValue([
-        { path: "config.json" },
-        { path: "model.safetensors" },
+        { path: "config.json", type: "file" },
+        { path: "model.safetensors", type: "file" },
       ]);
 
     global.fetch = jest.fn().mockResolvedValue({

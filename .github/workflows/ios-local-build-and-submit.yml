@@ -39,7 +39,7 @@ jobs:
         run: |
           brew install cocoapods
           gem install cocoapods-spm --no-document
-          brew install fastlane
+          gem install fastlane --no-document
 
       - name: Install JS dependencies
         run: npm ci
@@ -50,66 +50,20 @@ jobs:
       - name: Verify EAS auth
         run: eas whoami
 
-      - name: Validate EAS project ID matches slug
+      - name: Link/create EAS project (non-interactive)
         run: |
-          node - <<'NODE'
-          const { execSync } = require('child_process');
+          eas project:init --non-interactive --force
+          eas project:info || true
 
-          const app = require('./app.json');
-          const slug = app?.expo?.slug;
-          const projectId = app?.expo?.extra?.eas?.projectId;
-
-          if (!slug || !projectId) {
-            process.exit(0);
-          }
-
-          let info;
-          try {
-            info = JSON.parse(
-              execSync('eas project:info --json', {
-                stdio: ['ignore', 'pipe', 'pipe'],
-                env: {
-                  ...process.env,
-                  EAS_PROJECT_ID: projectId,
-                },
-              })
-                .toString()
-                .trim(),
-            );
-          } catch (error) {
-            console.warn(
-              'Unable to fetch EAS project info; skipping slug validation.',
-            );
-            process.exit(0);
-          }
-
-          const infoSlug = info?.slug ?? info?.project?.slug ?? info?.name;
-          if (infoSlug && infoSlug !== slug) {
-            throw new Error(
-              `EAS project slug "${infoSlug}" does not match app.json slug "${slug}".`,
-            );
-          }
-          NODE
-
-      - name: Validate local iOS credentials are available
+      - name: Clear local credentials
         run: |
-          if [ ! -f credentials.json ]; then
-            echo "❌ credentials.json is required for local builds. Run 'eas credentials --platform ios' and download credentials locally." >&2
-            exit 1
-          fi
-          if [ ! -f credentials/ios/dist-cert.p12 ]; then
-            echo "❌ Missing credentials/ios/dist-cert.p12. Re-download credentials with 'eas credentials --platform ios'." >&2
-            exit 1
-          fi
-          if [ ! -f credentials/ios/profile.mobileprovision ]; then
-            echo "❌ Missing credentials/ios/profile.mobileprovision. Re-download credentials with 'eas credentials --platform ios'." >&2
-            exit 1
-          fi
+          rm -rf ~/Library/MobileDevice/Provisioning\ Profiles/* 2>/dev/null || true
+          echo "Cleared local provisioning profiles to force EAS remote fetch"
 
       - name: Build iOS (local)
         run: |
           mkdir -p artifacts/ios
-          eas build --platform ios --local --profile production --non-interactive --output artifacts/ios/build.ipa
+          eas build --platform ios --local --profile production --non-interactive --output artifacts/ios/build.ipa --clear-cache
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4

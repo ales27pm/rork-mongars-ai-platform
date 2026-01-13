@@ -21,9 +21,12 @@ import {
   Mic,
   Volume2,
   StopCircle,
+  Globe,
 } from "lucide-react-native";
 import { useCognition } from "@/lib/providers/cognition";
 import { useHippocampus } from "@/lib/providers/hippocampus";
+import { useModelManager } from "@/lib/providers/model-manager";
+import { useWebScraper } from "@/lib/providers/web-scraper";
 import { useMicrophone } from "@/lib/hooks/useMicrophone";
 import type { Message } from "@/types";
 import type { ReflectionResult } from "@/types/introspection";
@@ -32,6 +35,8 @@ import { format } from "date-fns";
 export default function ChatScreen() {
   const cognition = useCognition();
   const hippocampus = useHippocampus();
+  const modelManager = useModelManager();
+  const webScraper = useWebScraper();
   const [input, setInput] = useState("");
   const [streamingText, setStreamingText] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -39,6 +44,7 @@ export default function ChatScreen() {
     null,
   );
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isWebSearching, setIsWebSearching] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   const {
@@ -50,6 +56,39 @@ export default function ChatScreen() {
   } = useMicrophone();
 
   const messages = hippocampus.shortTermMemory;
+  const hasLoadedModel = modelManager.loadedModelId != null;
+
+  const detectWebSearchCommand = useCallback(
+    (text: string): { isWebSearch: boolean; query?: string; url?: string } => {
+      const lower = text.toLowerCase().trim();
+      
+      if (lower.startsWith("search ") || lower.startsWith("search: ") || lower.startsWith("web search ")) {
+        const query = text.replace(/^(web )?search:?\s*/i, "").trim();
+        return { isWebSearch: true, query };
+      }
+      
+      if (lower.startsWith("look up ") || lower.startsWith("lookup ")) {
+        const query = text.replace(/^look ?up\s*/i, "").trim();
+        return { isWebSearch: true, query };
+      }
+      
+      if (lower.startsWith("fetch ") || lower.startsWith("open ") || lower.startsWith("read ")) {
+        const urlMatch = text.match(/https?:\/\/[^\s]+/);
+        if (urlMatch) {
+          return { isWebSearch: true, url: urlMatch[0] };
+        }
+      }
+      
+      if (lower.includes("what is") || lower.includes("who is") || lower.includes("when did") || lower.includes("how to")) {
+        if (lower.includes("online") || lower.includes("internet") || lower.includes("web") || lower.includes("google")) {
+          return { isWebSearch: true, query: text };
+        }
+      }
+      
+      return { isWebSearch: false };
+    },
+    [],
+  );
 
   const detectIntrospectionCommand = useCallback(
     (
@@ -109,7 +148,61 @@ export default function ChatScreen() {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
 
-    if (commandDetection.isCommand) {
+    const webSearchDetection = detectWebSearchCommand(input.trim());
+    
+    if (webSearchDetection.isWebSearch && webScraper.webBrowsingEnabled) {
+      setIsWebSearching(true);
+      try {
+        let responseContent: string;
+        
+        if (webSearchDetection.url) {
+          console.log(`[Chat] Fetching URL: ${webSearchDetection.url}`);
+          const pageResult = await cognition.fetchWebPage(webSearchDetection.url);
+          
+          if (pageResult.success) {
+            responseContent = `[Web Page: ${pageResult.title}]\n\nURL: ${pageResult.url}\n\n${pageResult.excerpt}\n\n---\nFull content available (${pageResult.content?.length || 0} chars)`;
+          } else {
+            responseContent = `Failed to fetch page: ${pageResult.error}`;
+          }
+        } else if (webSearchDetection.query) {
+          console.log(`[Chat] Web search: ${webSearchDetection.query}`);
+          const searchResult = await cognition.performWebSearch(webSearchDetection.query);
+          
+          if (searchResult.success) {
+            responseContent = `[Web Search Results]\n\nQuery: "${searchResult.query}"\nFound ${searchResult.resultCount} results\n\n${searchResult.summary}\n\n---\nSources:\n${searchResult.sources?.map((s: string) => `• ${s}`).join("\n") || "No sources available"}`;
+          } else {
+            responseContent = `Web search failed: ${searchResult.error}`;
+          }
+        } else {
+          responseContent = "Could not determine what to search for.";
+        }
+        
+        const webSearchMsg: Message = {
+          id: `msg_${Date.now()}`,
+          role: "assistant",
+          content: responseContent,
+          timestamp: Date.now(),
+          confidence: 0.9,
+          source: "local",
+          metadata: { webSearch: true },
+        };
+        
+        await hippocampus.storeMessage(webSearchMsg);
+      } catch (error) {
+        console.error("[Chat] Web search failed:", error);
+        const errorMsg: Message = {
+          id: `msg_${Date.now()}`,
+          role: "assistant",
+          content: `Web search failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+          timestamp: Date.now(),
+          confidence: 0.1,
+          source: "local",
+        };
+        await hippocampus.storeMessage(errorMsg);
+      } finally {
+        setIsWebSearching(false);
+      }
+    } else if (commandDetection.isCommand) {
       try {
         let result: ReflectionResult;
 
@@ -175,7 +268,7 @@ export default function ChatScreen() {
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
-  }, [input, cognition, hippocampus, detectIntrospectionCommand]);
+  }, [input, cognition, hippocampus, detectIntrospectionCommand, detectWebSearchCommand, webScraper.webBrowsingEnabled]);
 
   const copyMessage = useCallback(async (content: string) => {
     try {
@@ -352,6 +445,7 @@ export default function ChatScreen() {
   const renderMessage = ({ item }: { item: Message }) => {
     const isUser = item.role === "user";
     const isIntrospection = item.metadata?.introspection === true;
+    const isWebSearch = item.metadata?.webSearch === true;
     const isCurrentlySpeaking = isSpeaking && speakingMessageId === item.id;
 
     return (
@@ -360,6 +454,7 @@ export default function ChatScreen() {
           styles.messageBubble,
           isUser ? styles.userBubble : styles.assistantBubble,
           isIntrospection && styles.introspectionBubble,
+          isWebSearch && styles.webSearchBubble,
         ]}
         onLongPress={() => copyMessage(item.content)}
         activeOpacity={0.7}
@@ -370,11 +465,18 @@ export default function ChatScreen() {
             <Text style={styles.introspectionLabel}>INTROSPECTION</Text>
           </View>
         )}
+        {isWebSearch && (
+          <View style={styles.webSearchHeader}>
+            <Globe size={14} color="#10b981" />
+            <Text style={styles.webSearchLabel}>WEB SEARCH</Text>
+          </View>
+        )}
         <Text
           style={[
             styles.messageText,
             isUser ? styles.userText : styles.assistantText,
             isIntrospection && styles.introspectionText,
+            isWebSearch && styles.webSearchText,
           ]}
         >
           {item.content}
@@ -473,6 +575,29 @@ export default function ChatScreen() {
           </View>
         )}
 
+        {isWebSearching && (
+          <View style={styles.webSearchingContainer}>
+            <ActivityIndicator size="small" color="#10b981" />
+            <Text style={styles.webSearchingText}>Searching the web...</Text>
+          </View>
+        )}
+
+        {!hasLoadedModel && (
+          <View style={styles.noModelBanner}>
+            <Brain size={18} color="#f59e0b" />
+            <Text style={styles.noModelText}>
+              No local model loaded. Go to Models tab to download and load a model.
+            </Text>
+          </View>
+        )}
+
+        {webScraper.webBrowsingEnabled && (
+          <View style={styles.webBrowsingBadge}>
+            <Globe size={14} color="#10b981" />
+            <Text style={styles.webBrowsingText}>Web browsing enabled</Text>
+          </View>
+        )}
+
         <View style={styles.inputContainer}>
           <TouchableOpacity
             style={styles.pasteButton}
@@ -508,19 +633,19 @@ export default function ChatScreen() {
             style={styles.input}
             value={input}
             onChangeText={setInput}
-            placeholder="Ask monGARS anything..."
+            placeholder={hasLoadedModel ? "Ask monGARS anything..." : "Load a model first..."}
             placeholderTextColor="#64748b"
             multiline
             maxLength={500}
-            editable={!cognition.isGenerating}
+            editable={!cognition.isGenerating && hasLoadedModel}
           />
           <TouchableOpacity
             style={[
               styles.sendButton,
-              cognition.isGenerating && styles.sendButtonDisabled,
+              (cognition.isGenerating || !hasLoadedModel) && styles.sendButtonDisabled,
             ]}
             onPress={handleSend}
-            disabled={cognition.isGenerating || !input.trim()}
+            disabled={cognition.isGenerating || !input.trim() || !hasLoadedModel}
           >
             {cognition.isGenerating ? (
               <ActivityIndicator size="small" color="#fff" />
@@ -691,6 +816,62 @@ const styles = StyleSheet.create({
     fontFamily: "monospace",
     fontSize: 13,
   },
+  webSearchBubble: {
+    backgroundColor: "#064e3b",
+    borderWidth: 1,
+    borderColor: "#10b981",
+  },
+  webSearchHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 6,
+    marginBottom: 8,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#10b98133",
+  },
+  webSearchLabel: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: "#10b981",
+    textTransform: "uppercase" as const,
+  },
+  webSearchText: {
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  webSearchingContainer: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: "#064e3b",
+    borderRadius: 12,
+    gap: 8,
+  },
+  webSearchingText: {
+    fontSize: 14,
+    color: "#10b981",
+  },
+  webBrowsingBadge: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginHorizontal: 16,
+    marginBottom: 4,
+    backgroundColor: "#064e3b44",
+    borderRadius: 8,
+    gap: 6,
+  },
+  webBrowsingText: {
+    fontSize: 11,
+    color: "#10b981",
+  },
   transcribingContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -706,5 +887,22 @@ const styles = StyleSheet.create({
   transcribingText: {
     fontSize: 14,
     color: "#94a3b8",
+  },
+  noModelBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#78350f",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 10,
+    gap: 10,
+  },
+  noModelText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#fef3c7",
+    lineHeight: 18,
   },
 });

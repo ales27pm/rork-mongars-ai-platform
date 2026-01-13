@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "monGARS",
-    "slug": "mongars",
+    "slug": "rork-mongars",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.27pm.monGARS",
+      "bundleIdentifier": "com.rork.mongars",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio",
@@ -43,7 +43,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.27pm.mongars",
+      "package": "com.rork.mongars",
       "permissions": [
         "android.permission.VIBRATE",
         "android.permission.RECORD_AUDIO",
@@ -60,17 +60,21 @@
         "android.permission.FOREGROUND_SERVICE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.READ_CONTACTS",
-        "android.permission.WRITE_CONTACTS",
-        "android.permission.READ_CALENDAR",
-        "android.permission.WRITE_CALENDAR",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION"
+        "RECORD_AUDIO",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_CONTACTS",
+        "WRITE_CONTACTS",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "INTERNET"
       ]
     },
     "web": {
@@ -141,7 +145,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "27b456a3-e007-4885-8b39-a630b936c6f6"
+        "projectId": "0d0be6e6-1e32-4981-ae88-240dc8c7ee89"
       }
     }
   }

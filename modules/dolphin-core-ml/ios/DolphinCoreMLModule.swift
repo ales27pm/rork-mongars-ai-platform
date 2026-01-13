@@ -13,7 +13,6 @@ actor DolphinCoreMLState {
   private(set) var totalInferences: Int = 0
   private(set) var generationDurations: [TimeInterval] = []
   private(set) var encodingDurations: [TimeInterval] = []
-  private(set) var mlxEncodingDurations: [TimeInterval] = []
   private(set) var lastOperationDuration: TimeInterval?
   private(set) var lastOperationType: String?
   private(set) var metadata: [String: Any] = [:]
@@ -24,13 +23,12 @@ actor DolphinCoreMLState {
     totalInferences = 0
     generationDurations = []
     encodingDurations = []
-    mlxEncodingDurations = []
     lastOperationDuration = nil
     lastOperationType = nil
     os_log("[DolphinCoreML] Model unloaded and metrics reset")
   }
 
-  func loadModelIfNeeded(modelName: String, computeUnits: MLComputeUnits = .all) throws -> MLModel {
+  func loadModelIfNeeded(modelName: String, modelPath: String? = nil, computeUnits: MLComputeUnits = .all) throws -> MLModel {
     if let existingModel = model {
       return existingModel
     }
@@ -38,11 +36,34 @@ actor DolphinCoreMLState {
     let fileManager = FileManager.default
     var candidateURLs: [URL] = []
 
+    if let explicitPath = modelPath, !explicitPath.isEmpty {
+      let cleanPath: String
+      if explicitPath.hasPrefix("file://") {
+        cleanPath = String(explicitPath.dropFirst(7))
+      } else {
+        cleanPath = explicitPath
+      }
+      
+      let explicitURL = URL(fileURLWithPath: cleanPath)
+      if fileManager.fileExists(atPath: cleanPath) {
+        os_log("[DolphinCoreML] Found model at explicit path: %@", cleanPath)
+        candidateURLs.append(explicitURL)
+      } else {
+        os_log("[DolphinCoreML] Explicit model path does not exist: %@", cleanPath)
+      }
+    }
+
     if let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first {
       let mlpackagePath = documentsURL.appendingPathComponent("models").appendingPathComponent("\(modelName).mlpackage")
       if fileManager.fileExists(atPath: mlpackagePath.path) {
         os_log("[DolphinCoreML] Found model at: %@", mlpackagePath.path)
         candidateURLs.append(mlpackagePath)
+      }
+      
+      let mlmodelcPath = documentsURL.appendingPathComponent("models").appendingPathComponent("\(modelName).mlmodelc")
+      if fileManager.fileExists(atPath: mlmodelcPath.path) {
+        os_log("[DolphinCoreML] Found compiled model at: %@", mlmodelcPath.path)
+        candidateURLs.append(mlmodelcPath)
       }
       
       let docPath = documentsURL.appendingPathComponent("\(modelName).mlpackage")
@@ -63,8 +84,8 @@ actor DolphinCoreMLState {
     }
 
     guard let selectedURL = candidateURLs.first else {
-      os_log("[DolphinCoreML] MODEL_NOT_FOUND: %@", modelName)
-      throw NSError(domain: "DolphinCoreML", code: -1, userInfo: [NSLocalizedDescriptionKey: "MODEL_NOT_FOUND: \(modelName)"])
+      os_log("[DolphinCoreML] MODEL_NOT_FOUND: %@ (searched paths: explicit=%@)", modelName, modelPath ?? "none")
+      throw NSError(domain: "DolphinCoreML", code: -1, userInfo: [NSLocalizedDescriptionKey: "MODEL_NOT_FOUND: \(modelName). Searched explicit path: \(modelPath ?? "none")"])
     }
 
     os_log("[DolphinCoreML] Loading model from: %@", selectedURL.path)
@@ -106,16 +127,6 @@ actor DolphinCoreMLState {
     lastOperationType = "encoding"
   }
 
-  func recordMLXEncoding(duration: TimeInterval) {
-    mlxEncodingDurations.append(duration)
-    if mlxEncodingDurations.count > 1000 {
-      mlxEncodingDurations.removeFirst(mlxEncodingDurations.count - 1000)
-    }
-    totalInferences += 1
-    lastOperationDuration = duration
-    lastOperationType = "mlxEncoding"
-  }
-
   func metrics() -> [String: Any] {
     func stats(from values: [TimeInterval]) -> [String: Any]? {
       guard !values.isEmpty else { return nil }
@@ -136,7 +147,6 @@ actor DolphinCoreMLState {
 
     return [
       "encoding": stats(from: encodingDurations) ?? [:],
-      "mlxEncoding": stats(from: mlxEncodingDurations) ?? [:],
       "generation": stats(from: generationDurations) ?? [:],
       "totalInferences": totalInferences,
       "lastOperationDuration": lastOperationDuration ?? 0,
@@ -148,101 +158,47 @@ actor DolphinCoreMLState {
 public class DolphinCoreMLModule: Module {
   private let log = Logger(subsystem: "app.27pm.mongars", category: "DolphinCoreML")
 
-  private var mlxEngineStore: Any?
-  private var mlxEngineConfigStore: Any?
-  private let mlxEngineLock = NSLock()
-
-  @available(iOS 18.0, *)
-  private var mlxEngine: MLXEngine {
-    get {
-      mlxEngineLock.lock()
-      defer { mlxEngineLock.unlock() }
-
-      if let engine = mlxEngineStore as? MLXEngine {
-        return engine
-      }
-
-      let engine = MLXEngine()
-      mlxEngineStore = engine
-      return engine
-    }
-    set {
-      mlxEngineLock.lock()
-      defer { mlxEngineLock.unlock() }
-      mlxEngineStore = newValue
-    }
-  }
-
-  @available(iOS 18.0, *)
-  private var mlxEngineConfig: MLXEngine.Configuration {
-    get {
-      mlxEngineLock.lock()
-      defer { mlxEngineLock.unlock() }
-
-      if let config = mlxEngineConfigStore as? MLXEngine.Configuration {
-        return config
-      }
-
-      let config = MLXEngine.Configuration()
-      mlxEngineConfigStore = config
-      return config
-    }
-    set {
-      mlxEngineLock.lock()
-      defer { mlxEngineLock.unlock() }
-      mlxEngineConfigStore = newValue
-    }
-  }
-
   public func definition() -> ModuleDefinition {
     Name("DolphinCoreML")
 
     Events("onToken", "onComplete", "onError")
 
     AsyncFunction("initialize") { (config: [String: Any]) -> [String: Any] in
-      if #available(iOS 18.0, *) {
-        let modelName = (config["modelName"] as? String) ?? "Dolphin"
-        let computeUnits = self.computeUnits(from: config["computeUnits"] as? String)
-        do {
-          _ = try await DolphinCoreMLState.shared.loadModelIfNeeded(modelName: modelName, computeUnits: computeUnits)
-          let deviceInfo = self.collectDeviceInfo()
-          var metadata = await DolphinCoreMLState.shared.metadata
-          metadata["contextLength"] = 8192
-          metadata["version"] = "3.0"
-          metadata["computeUnits"] = computeUnits.rawValue
+      let modelName = (config["modelName"] as? String) ?? "Dolphin"
+      let modelPath = config["modelPath"] as? String
+      let computeUnits = self.computeUnits(from: config["computeUnits"] as? String)
+      
+      self.log.info("[DolphinCoreML] Initialize called with modelName=\(modelName), modelPath=\(modelPath ?? "nil")")
+      
+      do {
+        _ = try await DolphinCoreMLState.shared.loadModelIfNeeded(modelName: modelName, modelPath: modelPath, computeUnits: computeUnits)
+        let deviceInfo = self.collectDeviceInfo()
+        var metadata = await DolphinCoreMLState.shared.metadata
+        metadata["contextLength"] = 8192
+        metadata["version"] = "3.0"
+        metadata["computeUnits"] = computeUnits.rawValue
 
-          return [
-            "success": true,
-            "metadata": metadata,
-            "deviceInfo": deviceInfo
-          ]
-        } catch {
-          self.log.error("Failed to load model: \(error.localizedDescription)")
-          let nsError = error as NSError
-          let stableCode =
-            (nsError.userInfo["code"] as? String)
-            ?? ((nsError.userInfo[NSLocalizedDescriptionKey] as? String))
-            ?? "MODEL_LOAD_FAILED"
-          return [
-            "success": false,
-            "error": [
-              "code": stableCode,
-              "message": nsError.localizedDescription
-            ],
-            "metadata": [
-              "modelName": modelName
-            ],
-            "deviceInfo": self.collectDeviceInfo()
-          ]
-        }
-      } else {
+        return [
+          "success": true,
+          "metadata": metadata,
+          "deviceInfo": deviceInfo
+        ]
+      } catch {
+        self.log.error("Failed to load model: \(error.localizedDescription)")
+        let nsError = error as NSError
+        let stableCode =
+          (nsError.userInfo["code"] as? String)
+          ?? ((nsError.userInfo[NSLocalizedDescriptionKey] as? String))
+          ?? "MODEL_LOAD_FAILED"
         return [
           "success": false,
           "error": [
-            "code": "UNSUPPORTED_PLATFORM",
-            "message": "iOS 18 or later is required to run DolphinCoreML."
+            "code": stableCode,
+            "message": nsError.localizedDescription
           ],
-          "metadata": [:],
+          "metadata": [
+            "modelName": modelName
+          ],
           "deviceInfo": self.collectDeviceInfo()
         ]
       }
@@ -250,67 +206,7 @@ public class DolphinCoreMLModule: Module {
 
     AsyncFunction("generateStream") { [weak self] (prompt: String, params: [String: Any]?) -> String in
       guard let self else { return "" }
-
       return try await self.runGeneration(prompt: prompt, params: params ?? [:])
-    }
-
-    AsyncFunction("initializeMLXEngine") { (config: [String: Any]?) -> [String: Any] in
-      if #available(iOS 18.0, *) {
-        do {
-          let engineConfig = self.buildMLXConfig(from: config ?? [:])
-          let summary: [String: Any]
-          if await self.mlxEngine.isReady(for: engineConfig) {
-            self.mlxEngineConfig = engineConfig
-            summary = [
-              "engine": "mlx",
-              "configuration": engineConfig.asDictionary(),
-              "message": "MLX engine already initialized"
-            ]
-          } else {
-            summary = try await self.mlxEngine.initialize(config: engineConfig)
-            self.mlxEngineConfig = engineConfig
-          }
-
-          return [
-            "success": true,
-            "engine": summary
-          ]
-        } catch {
-          self.log.error("[DolphinCoreML] Failed to initialize MLX engine: \(error.localizedDescription)")
-          return [
-            "success": false,
-            "error": [
-              "code": "MLX_ENGINE_ERROR",
-              "message": error.localizedDescription
-            ]
-          ]
-        }
-      }
-
-      return [
-        "success": false,
-        "error": [
-          "code": "UNSUPPORTED_PLATFORM",
-          "message": "MLX engine requires iOS 18 or later"
-        ]
-      ]
-    }
-
-    AsyncFunction("encodeWithMLX") { (texts: [String], options: [String: Any]?) -> [[Double]] in
-      guard #available(iOS 18.0, *) else {
-        throw NSError(domain: "DolphinCoreML", code: -20, userInfo: [NSLocalizedDescriptionKey: "MLX engine requires iOS 18"])
-      }
-
-      var mlxOptions = options ?? [:]
-      mlxOptions["engine"] = "mlx"
-      if !(try await self.ensureMLXEngineInitialized(options: mlxOptions)) {
-        throw NSError(domain: "DolphinCoreML", code: -21, userInfo: [NSLocalizedDescriptionKey: "MLX engine failed to initialize"])
-      }
-
-      let start = Date()
-      let embeddings = try await self.mlxEngine.encodeBatch(texts, options: mlxOptions)
-      await DolphinCoreMLState.shared.recordMLXEncoding(duration: Date().timeIntervalSince(start))
-      return embeddings
     }
 
     AsyncFunction("encodeBatch") { (texts: [String], options: [String: Any]?) -> [[Double]] in
@@ -348,69 +244,6 @@ public class DolphinCoreMLModule: Module {
     default:
       return .all
     }
-  }
-
-  @available(iOS 18.0, *)
-  private func ensureMLXEngineInitialized(options: [String: Any]) async throws -> Bool {
-    do {
-      if options["engine"] as? String == "mlx" || options["preferMLX"] as? Bool == true {
-        let config = buildMLXConfig(from: options)
-        if !(await mlxEngine.isReady(for: config)) {
-          mlxEngineConfig = config
-          _ = try await mlxEngine.initialize(config: mlxEngineConfig)
-        }
-      }
-      return true
-    } catch {
-      log.error("[DolphinCoreML] MLX engine initialization failed: \(error.localizedDescription)")
-      return false
-    }
-  }
-
-  @available(iOS 18.0, *)
-  private func buildMLXConfig(from payload: [String: Any]) -> MLXEngine.Configuration {
-    let vocab = payload["vocabSize"] as? Int ?? mlxEngineConfig.vocabSize
-    let context = payload["contextLength"] as? Int ?? mlxEngineConfig.contextLength
-    let hidden = payload["hiddenSize"] as? Int ?? mlxEngineConfig.hiddenSize
-    let heads = payload["heads"] as? Int ?? mlxEngineConfig.heads
-    let layers = payload["layers"] as? Int ?? mlxEngineConfig.layers
-    let seed = payload["seed"] as? UInt64 ?? mlxEngineConfig.seed
-    let maxCache = payload["maxCacheEntries"] as? Int ?? mlxEngineConfig.maxCacheEntries
-
-    let modelIdRaw = payload["modelId"] as? String
-    let modelId = (modelIdRaw?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? mlxEngineConfig.modelId
-
-    let revisionRaw = payload["revision"] as? String
-    let revision = (revisionRaw?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? mlxEngineConfig.revision
-
-    let tokenizerIdRaw = payload["tokenizerId"] as? String
-    let tokenizerId = (tokenizerIdRaw?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? mlxEngineConfig.tokenizerId
-
-    let localModelPathRaw = payload["localModelPath"] as? String
-    let localModelPath = (localModelPathRaw?.trimmingCharacters(in: .whitespacesAndNewlines))
-      .flatMap { $0.isEmpty ? nil : $0 }
-      .map { raw in
-        if let url = URL(string: raw), url.isFileURL {
-          return url.path
-        }
-        return (raw as NSString).expandingTildeInPath
-      }
-      .map { ($0 as NSString).standardizingPath }
-      ?? mlxEngineConfig.localModelPath
-
-    return MLXEngine.Configuration(
-      vocabSize: vocab,
-      contextLength: context,
-      hiddenSize: hidden,
-      heads: heads,
-      layers: layers,
-      seed: seed,
-      maxCacheEntries: maxCache,
-      modelId: modelId,
-      revision: revision,
-      tokenizerId: tokenizerId,
-      localModelPath: localModelPath
-    )
   }
 
   private func ensureModelLoaded() async throws {
@@ -451,7 +284,7 @@ public class DolphinCoreMLModule: Module {
       
       for iteration in 0..<maxTokens {
         let inputFeatures = try createModelInput(tokenIds: currentTokenIds)
-        let output = try model.prediction(from: inputFeatures)
+        let output = try await model.prediction(from: inputFeatures)
         
         let logits = try extractLogits(from: output)
         let nextTokenId = try sampleToken(logits: logits, temperature: temperature, topP: topP)
@@ -503,17 +336,6 @@ public class DolphinCoreMLModule: Module {
   }
 
   private func runEncoding(texts: [String], options: [String: Any]) async throws -> [[Double]] {
-    if #available(iOS 18.0, *),
-       (options["engine"] as? String == "mlx" || options["preferMLX"] as? Bool == true) {
-      guard try await ensureMLXEngineInitialized(options: options) else {
-        throw NSError(domain: "DolphinCoreML", code: -22, userInfo: [NSLocalizedDescriptionKey: "MLX engine unavailable"])
-      }
-      let start = Date()
-      let embeddings = try await mlxEngine.encodeBatch(texts, options: options)
-      await DolphinCoreMLState.shared.recordMLXEncoding(duration: Date().timeIntervalSince(start))
-      return embeddings
-    }
-
     let state = DolphinCoreMLState.shared
     try await ensureModelLoaded()
     guard let model = await state.model else {
@@ -533,7 +355,7 @@ public class DolphinCoreMLModule: Module {
           continue
         }
         
-        let output = try model.prediction(from: inputFeatures)
+        let output = try await model.prediction(from: inputFeatures)
         
         if let embeddingFeature = output.featureValue(for: modelDescription),
            let embeddingArray = embeddingFeature.multiArrayValue {
@@ -565,7 +387,6 @@ public class DolphinCoreMLModule: Module {
     return embeddings
   }
 
-  // Extracted fallback logic for clarity
   private func fallbackEmbedding(for text: String, options: [String: Any]) -> [Double] {
     let shouldNormalize = options["normalize"] as? Bool ?? true
     let maxLength = options["maxLength"] as? Int ?? 512
@@ -579,7 +400,7 @@ public class DolphinCoreMLModule: Module {
       preparedText = text
     }
 
-    if let embedding = NLEmbedding.wordEmbedding(forLanguage: .english) {
+    if let embedding = NLEmbedding.wordEmbedding(for: .english) {
       let tokens = preparedText.split(separator: " ").map(String.init)
       let vectors = tokens.compactMap { embedding.vector(for: $0) }
       if let first = vectors.first {
@@ -689,7 +510,7 @@ public class DolphinCoreMLModule: Module {
     let sumExp = expLogits.reduce(0, +)
     let probs = expLogits.map { $0 / sumExp }
     
-    var sortedIndices = probs.enumerated().sorted { $0.element > $1.element }
+    let sortedIndices = probs.enumerated().sorted { $0.element > $1.element }
     
     var cumulativeProb: Float = 0.0
     var topPIndices: [(offset: Int, element: Float)] = []
@@ -746,5 +567,6 @@ public class DolphinCoreMLModule: Module {
 
     let magnitude = sqrt(values.reduce(0) { $0 + $1 * $1 })
     guard magnitude > 0 else { return values }
-      return values.map { $0 / magnitude }
-    }
+    return values.map { $0 / magnitude }
+  }
+}

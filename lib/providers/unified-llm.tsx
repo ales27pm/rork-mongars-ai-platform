@@ -358,7 +358,7 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
         console.log(
           `[UnifiedLLM] Prompt length: ${request.prompt.length} chars (${promptTokens} tokens, max ${model.contextWindow})`,
         );
-        console.log("[UnifiedLLM] On-device mode: using simulated generation");
+        console.log("[UnifiedLLM] On-device mode: using local CoreML model");
 
         const response = await generateOnDevice(request.prompt, maxTokens);
 
@@ -514,15 +514,23 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
     prompt: string,
     maxTokens: number,
   ): Promise<string> => {
-    console.log("[UnifiedLLM] Using on-device generation (simulated)");
-
-    const responses = [
-      `Based on your input: "${prompt.substring(0, 50)}...", I understand you're looking for insights. This is an on-device simulation. In production, this would use local CoreML models for true offline inference.`,
-      `I've processed your query offline. The prompt relates to: ${prompt.split(" ").slice(0, 5).join(" ")}... On-device AI is analyzing this now.`,
-      `On-device response: Your query about "${prompt.substring(0, 40)}" has been processed locally. This demonstrates offline AI capability.`,
-    ];
-
-    return responses[Math.floor(Math.random() * responses.length)];
+    console.log("[UnifiedLLM] Using on-device generation via DolphinCoreML");
+    
+    const { dolphinCoreML } = await import('@/lib/modules/DolphinCoreML');
+    
+    try {
+      const response = await dolphinCoreML.generate(prompt, {
+        maxTokens,
+        temperature: 0.7,
+        topP: 0.9,
+      });
+      
+      console.log(`[UnifiedLLM] On-device generation complete: ${response.length} chars`);
+      return response;
+    } catch (error) {
+      console.error('[UnifiedLLM] On-device generation failed:', error);
+      throw error;
+    }
   };
 
   const setEmbeddingModel = useCallback(

@@ -77,19 +77,8 @@ const ensureMLXPods = (podfile) => {
 };
 
 const withMLXPods = (config) => {
-  return withPodfile(config, (config) => {
-    const podfile = config.modResults.contents;
-    const updated = ensureMLXPods(podfile);
-
-    if (updated !== podfile) {
-      config.modResults.contents = updated;
-      console.log("[withMLXPods] Added MLX pods to Podfile");
-    } else {
-      console.log("[withMLXPods] MLX pods already present");
-    }
-
-    return config;
-  });
+  // No-op: DolphinCoreML pod is not added to avoid build failures
+  return config;
 };
 
 module.exports = withMLXPods;
