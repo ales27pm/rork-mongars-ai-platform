@@ -76,9 +76,7 @@
   "overrides": {
     "expo-location": "~19.0.8",
     "expo-file-system": "~19.0.20",
-    "@teovilla/react-native-web-maps": {
-      "expo-location": "~19.0.8"
-    }
+    "@teovilla/react-native-web-maps/expo-location": "~19.0.8"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
