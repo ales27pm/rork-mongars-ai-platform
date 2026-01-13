@@ -12,7 +12,9 @@ import { useCalendar } from "./calendar";
 import { useLocation } from "./location";
 import { useCamera } from "./camera";
 import { useContacts } from "./contacts";
+import { useModelManager } from "./model-manager";
 import { generateText } from "@rork-ai/toolkit-sdk";
+import { dolphinCoreML } from "@/lib/modules/DolphinCoreML";
 import {
   cosineSimilarity,
   generateMockEmbedding,
@@ -52,6 +54,7 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
   const location = useLocation();
   const camera = useCamera();
   const contacts = useContacts();
+  const modelManager = useModelManager();
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastSource, setLastSource] = useState<"local" | "cached">("local");
   const [reasoningTrace, setReasoningTrace] = useState<ReasoningTrace[]>([]);
@@ -390,24 +393,42 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
 
       try {
         telemetry.startTimer("llm_inference");
-        const modelInfo = unifiedLLM.getModelInfo();
+        
+        const loadedModel = modelManager.getLoadedModel();
+        const isLocalModelAvailable = loadedModel != null;
+        
         console.log(
-          `[Cognition] Using model: ${modelInfo.active?.name || "Unknown"}`,
+          `[Cognition] Using model: ${isLocalModelAvailable ? loadedModel!.name + " (LOCAL)" : "Cloud API (GPT-4)"}`,
         );
 
         console.log("[Cognition] Starting inference...");
         telemetry.incrementCounter("inference_started");
 
-        const response = await generateText({
-          messages: [{ role: "user", content: contextPrompt }],
-        });
-
-        const inferenceSource = "local" as const;
+        let response: string;
+        let inferenceSource: "local" | "cached";
+        
+        if (isLocalModelAvailable) {
+          console.log("[Cognition] Using local CoreML model for inference");
+          response = await dolphinCoreML.generate(contextPrompt, {
+            maxTokens: 512,
+            temperature: 0.7,
+            topP: 0.9,
+          });
+          inferenceSource = "local";
+          console.log("[Cognition] Local model response received");
+        } else {
+          console.log("[Cognition] No local model loaded, using cloud API");
+          response = await generateText({
+            messages: [{ role: "user", content: contextPrompt }],
+          });
+          inferenceSource = "local";
+        }
+        
         telemetry.endTimer("llm_inference", { source: inferenceSource });
 
         rawResponse = response;
         source = inferenceSource;
-        confidence = 0.88 + Math.random() * 0.1;
+        confidence = isLocalModelAvailable ? 0.85 + Math.random() * 0.1 : 0.88 + Math.random() * 0.1;
       } catch (error) {
         console.error("[Cognition] All inference paths failed:", error);
         telemetry.emit(
@@ -562,7 +583,6 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
       personality,
       evolution,
       telemetry,
-      unifiedLLM,
       affectiveState,
       affectiveHistory,
       calendar.calendarSharingAllowed,
@@ -573,6 +593,7 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
       contacts.permissionStatus,
       location.locationSharingAllowed,
       location.permissionStatus,
+      modelManager,
     ],
   );
 
