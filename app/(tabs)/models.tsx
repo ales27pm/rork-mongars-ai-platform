@@ -22,10 +22,14 @@ import {
   Zap,
   Shield,
   Package,
+  FileDown,
+  CheckCircle,
+  AlertCircle,
+  Loader,
 } from "lucide-react-native";
 import { useModelManager } from "@/lib/providers/model-manager";
 import { modelDownloadService } from "@/lib/services/ModelDownloadService";
-import { LLMModel } from "@/types/model-manager";
+import { LLMModel, DownloadProgress } from "@/types/model-manager";
 
 export default function ModelsScreen() {
   const {
@@ -257,13 +261,130 @@ export default function ModelsScreen() {
 interface ModelCardProps {
   model: LLMModel;
   isLoaded: boolean;
-  progress?: any;
+  progress?: DownloadProgress;
   isLoadingModel: boolean;
   onDownload: () => void;
   onDelete: () => void;
   onLoad: () => void;
   onUnload: () => void;
   onCancel: () => void;
+}
+
+function DownloadProgressDisplay({ progress }: { progress: DownloadProgress }) {
+  const getPhaseIcon = () => {
+    switch (progress.phase) {
+      case "init":
+      case "fetching_repo":
+        return <Loader size={16} color="#3b82f6" />;
+      case "downloading_files":
+        return <FileDown size={16} color="#3b82f6" />;
+      case "verifying":
+        return <CheckCircle size={16} color="#10b981" />;
+      case "finalizing":
+        return <Package size={16} color="#f59e0b" />;
+      default:
+        return <Download size={16} color="#3b82f6" />;
+    }
+  };
+
+  const getStatusColor = () => {
+    switch (progress.status) {
+      case "error":
+        return "#ef4444";
+      case "completed":
+        return "#10b981";
+      case "verifying":
+        return "#f59e0b";
+      case "fetching":
+        return "#8b5cf6";
+      default:
+        return "#3b82f6";
+    }
+  };
+
+  const isIndeterminate = progress.phase === "init" || progress.phase === "fetching_repo";
+
+  return (
+    <View style={styles.progressContainer}>
+      <View style={styles.progressHeader}>
+        <View style={styles.progressPhase}>
+          {getPhaseIcon()}
+          <Text style={styles.progressPhaseText}>
+            {progress.statusMessage || "Downloading..."}
+          </Text>
+        </View>
+        {progress.status === "error" && (
+          <AlertCircle size={16} color="#ef4444" />
+        )}
+      </View>
+
+      <View style={styles.progressBar}>
+        {isIndeterminate ? (
+          <View style={styles.indeterminateBar}>
+            <View style={[styles.indeterminateFill, { backgroundColor: getStatusColor() }]} />
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.progressFill,
+              { 
+                width: `${Math.min(progress.percentage, 100)}%`,
+                backgroundColor: getStatusColor(),
+              },
+            ]}
+          />
+        )}
+      </View>
+
+      <View style={styles.progressDetails}>
+        <View style={styles.progressStats}>
+          <Text style={styles.progressPercentage}>
+            {progress.percentage.toFixed(1)}%
+          </Text>
+          {progress.totalFiles && progress.currentFileIndex && (
+            <Text style={styles.progressFileCount}>
+              File {progress.currentFileIndex}/{progress.totalFiles}
+            </Text>
+          )}
+        </View>
+        
+        <View style={styles.progressMeta}>
+          {progress.speed > 0 && (
+            <Text style={styles.progressSpeed}>
+              {modelDownloadService.formatSpeed(progress.speed)}
+            </Text>
+          )}
+          {progress.estimatedTimeRemaining > 0 && progress.status === "downloading" && (
+            <Text style={styles.progressEta}>
+              ETA: {modelDownloadService.formatTime(progress.estimatedTimeRemaining)}
+            </Text>
+          )}
+        </View>
+      </View>
+
+      {progress.currentFile && progress.phase === "downloading_files" && (
+        <View style={styles.currentFileContainer}>
+          <Text style={styles.currentFileLabel}>Current file:</Text>
+          <Text style={styles.currentFileName} numberOfLines={1}>
+            {progress.currentFile}
+          </Text>
+        </View>
+      )}
+
+      {progress.bytesDownloaded > 0 && (
+        <Text style={styles.progressBytes}>
+          {modelDownloadService.formatBytes(progress.bytesDownloaded)} / {modelDownloadService.formatBytes(progress.totalBytes)}
+        </Text>
+      )}
+
+      {progress.error && (
+        <View style={styles.errorContainer}>
+          <AlertCircle size={14} color="#ef4444" />
+          <Text style={styles.errorText}>{progress.error}</Text>
+        </View>
+      )}
+    </View>
+  );
 }
 
 function ModelCard({
@@ -361,27 +482,8 @@ function ModelCard({
         </View>
       )}
 
-      {model.isDownloading && progress && (
-        <View style={styles.progressContainer}>
-          <View style={styles.progressBar}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${progress.percentage}%` },
-              ]}
-            />
-          </View>
-          <View style={styles.progressInfo}>
-            <Text style={styles.progressText}>
-              {progress.percentage.toFixed(1)}% •{" "}
-              {modelDownloadService.formatSpeed(progress.speed)}
-            </Text>
-            <Text style={styles.progressText}>
-              ETA:{" "}
-              {modelDownloadService.formatTime(progress.estimatedTimeRemaining)}
-            </Text>
-          </View>
-        </View>
+      {(model.isDownloading || progress) && progress && (
+        <DownloadProgressDisplay progress={progress} />
       )}
 
       <View style={styles.modelActions}>
@@ -658,26 +760,117 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   progressContainer: {
+    backgroundColor: "#0f172a",
+    borderRadius: 8,
+    padding: 12,
+    gap: 10,
+  },
+  progressHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  progressPhase: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
+    flex: 1,
+  },
+  progressPhaseText: {
+    color: "#e2e8f0",
+    fontSize: 13,
+    fontWeight: "500",
+    flex: 1,
   },
   progressBar: {
-    height: 8,
-    backgroundColor: "#334155",
-    borderRadius: 4,
+    height: 6,
+    backgroundColor: "#1e293b",
+    borderRadius: 3,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#3b82f6",
-    borderRadius: 4,
+    borderRadius: 3,
   },
-  progressInfo: {
+  indeterminateBar: {
+    height: "100%",
+    width: "100%",
+    overflow: "hidden",
+  },
+  indeterminateFill: {
+    height: "100%",
+    width: "30%",
+    borderRadius: 3,
+  },
+  progressDetails: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
   },
-  progressText: {
+  progressStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  progressPercentage: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  progressFileCount: {
+    color: "#64748b",
+    fontSize: 12,
+  },
+  progressMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  progressSpeed: {
+    color: "#3b82f6",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  progressEta: {
     color: "#94a3b8",
     fontSize: 12,
+  },
+  currentFileContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#1e293b",
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+  },
+  currentFileLabel: {
+    color: "#64748b",
+    fontSize: 11,
+  },
+  currentFileName: {
+    color: "#94a3b8",
+    fontSize: 11,
+    flex: 1,
+  },
+  progressBytes: {
+    color: "#64748b",
+    fontSize: 11,
+    textAlign: "center",
+  },
+  errorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#ef444420",
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+  },
+  errorText: {
+    color: "#ef4444",
+    fontSize: 12,
+    flex: 1,
   },
   modelActions: {
     flexDirection: "row",

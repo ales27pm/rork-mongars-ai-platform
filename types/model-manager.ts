@@ -42,8 +42,13 @@ export interface DownloadProgress {
   percentage: number;
   speed: number;
   estimatedTimeRemaining: number;
-  status: "idle" | "downloading" | "paused" | "completed" | "error";
+  status: "idle" | "downloading" | "paused" | "completed" | "error" | "fetching" | "verifying";
   error?: string;
+  statusMessage?: string;
+  currentFile?: string;
+  currentFileIndex?: number;
+  totalFiles?: number;
+  phase?: "init" | "fetching_repo" | "downloading_files" | "verifying" | "finalizing";
 }
 
 export interface ModelSettings {

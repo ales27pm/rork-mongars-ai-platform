@@ -313,82 +313,144 @@ export class ModelDownloadService {
 
     const modelFormat = model.format ?? "coreml";
 
-    console.log(`[ModelDownloadService] Starting download: ${model.name}`);
-    console.log(`[ModelDownloadService] Format: ${modelFormat}`);
-    console.log(`[ModelDownloadService] Size: ${this.formatBytes(model.size)}`);
+    console.log("\n" + "=".repeat(60));
+    console.log(`[ModelDownloadService] 🚀 STARTING DOWNLOAD`);
+    console.log(`[ModelDownloadService] Model: ${model.name}`);
+    console.log(`[ModelDownloadService] Display Name: ${model.displayName}`);
+    console.log(`[ModelDownloadService] Format: ${modelFormat.toUpperCase()}`);
+    console.log(`[ModelDownloadService] Expected Size: ${this.formatBytes(model.size)}`);
+    console.log(`[ModelDownloadService] Hugging Face Repo: ${model.huggingFaceRepo || "N/A"}`);
+    console.log("=".repeat(60) + "\n");
 
     let tempDir = "";
 
-    try {
-      await this.ensureModelDirectory();
+    const emitProgress = (progress: Partial<DownloadProgress>) => {
+      if (onProgress) {
+        onProgress({
+          modelId: model.id,
+          bytesDownloaded: 0,
+          totalBytes: model.size,
+          percentage: 0,
+          speed: 0,
+          estimatedTimeRemaining: 0,
+          status: "downloading",
+          ...progress,
+        });
+      }
+    };
 
+    try {
+      emitProgress({
+        status: "fetching",
+        phase: "init",
+        statusMessage: "Initializing download...",
+        percentage: 0,
+      });
+
+      console.log("[ModelDownloadService] 📁 Ensuring model directory exists...");
+      await this.ensureModelDirectory();
+      console.log("[ModelDownloadService] ✓ Model directory ready");
+
+      console.log("[ModelDownloadService] 🔍 Checking if model already exists...");
       const isAlreadyDownloaded = await this.isModelDownloaded(model.id);
       if (isAlreadyDownloaded) {
-        console.log("[ModelDownloadService] Model already downloaded");
-        if (onProgress) {
-          onProgress({
-            modelId: model.id,
-            bytesDownloaded: model.size,
-            totalBytes: model.size,
-            percentage: 100,
-            speed: 0,
-            estimatedTimeRemaining: 0,
-            status: "completed",
-          });
-        }
+        console.log("[ModelDownloadService] ✓ Model already downloaded, skipping");
+        emitProgress({
+          bytesDownloaded: model.size,
+          totalBytes: model.size,
+          percentage: 100,
+          status: "completed",
+          statusMessage: "Model already downloaded",
+        });
         return true;
       }
+      console.log("[ModelDownloadService] Model not found locally, proceeding with download");
 
+      console.log("[ModelDownloadService] 💾 Checking available disk space...");
       const availableSpace = await this.getDiskSpaceAvailable();
-      if (availableSpace < model.size * 1.5) {
-        console.error("[ModelDownloadService] Insufficient disk space");
-        console.error(
-          `[ModelDownloadService] Required: ${this.formatBytes(model.size * 1.5)}, Available: ${this.formatBytes(availableSpace)}`,
-        );
+      const requiredSpace = model.size * 1.5;
+      console.log(`[ModelDownloadService] Available: ${this.formatBytes(availableSpace)}`);
+      console.log(`[ModelDownloadService] Required: ${this.formatBytes(requiredSpace)} (1.5x model size for extraction)`);
+      
+      if (availableSpace < requiredSpace) {
+        console.error("[ModelDownloadService] ❌ Insufficient disk space!");
+        emitProgress({
+          status: "error",
+          statusMessage: `Insufficient disk space. Need ${this.formatBytes(requiredSpace)}, have ${this.formatBytes(availableSpace)}`,
+          error: "Insufficient disk space",
+        });
         return false;
       }
+      console.log("[ModelDownloadService] ✓ Sufficient disk space available");
 
       if (!model.huggingFaceRepo) {
-        console.error(
-          "[ModelDownloadService] No Hugging Face repository specified",
-        );
+        console.error("[ModelDownloadService] ❌ No Hugging Face repository specified");
+        emitProgress({
+          status: "error",
+          statusMessage: "No repository URL configured for this model",
+          error: "No repository URL",
+        });
         return false;
       }
 
-      console.log(`[ModelDownloadService] Fetching files from: https://huggingface.co/${model.huggingFaceRepo}`);
+      emitProgress({
+        status: "fetching",
+        phase: "fetching_repo",
+        statusMessage: "Fetching repository structure...",
+        percentage: 1,
+      });
+
+      console.log("\n" + "-".repeat(40));
+      console.log(`[ModelDownloadService] 🌐 FETCHING REPOSITORY`);
+      console.log(`[ModelDownloadService] URL: https://huggingface.co/${model.huggingFaceRepo}`);
+      console.log("-".repeat(40));
 
       const knownModel = AVAILABLE_MODELS.find((m) => m.id === model.id);
       const subpath = knownModel?.huggingFaceSubpath;
 
       let files: HuggingFaceFile[];
       try {
+        console.log(`[ModelDownloadService] Subpath filter: ${subpath || "(none)"}`);
         files = await this.fetchHuggingFaceRepoFiles(
           model.huggingFaceRepo,
           modelFormat,
           undefined,
           subpath,
         );
+        console.log(`[ModelDownloadService] ✓ Repository structure fetched successfully`);
       } catch (fetchError) {
-        console.error("[ModelDownloadService] Failed to fetch repository files:", fetchError);
+        console.error("[ModelDownloadService] ❌ Failed to fetch repository files:", fetchError);
         if (fetchError instanceof Error && fetchError.message.includes("404")) {
           console.error(`[ModelDownloadService] Repository not found: ${model.huggingFaceRepo}`);
           console.error("[ModelDownloadService] Please verify the repository exists at:");
           console.error(`  https://huggingface.co/${model.huggingFaceRepo}`);
         }
+        emitProgress({
+          status: "error",
+          statusMessage: "Failed to fetch repository structure",
+          error: fetchError instanceof Error ? fetchError.message : "Unknown error",
+        });
         return false;
       }
 
       if (files.length === 0) {
-        console.error("[ModelDownloadService] No compatible files found in repository");
+        console.error("[ModelDownloadService] ❌ No compatible files found in repository");
         console.error(`[ModelDownloadService] Expected format: ${modelFormat}`);
         console.error("[ModelDownloadService] Verify the repository contains MLX or CoreML model files");
+        emitProgress({
+          status: "error",
+          statusMessage: `No ${modelFormat.toUpperCase()} files found in repository`,
+          error: "No compatible files",
+        });
         return false;
       }
 
       const modelPath = this.getModelPath(model.id, modelFormat);
       tempDir = `${this.getModelDirectory()}temp_${model.id}/`;
 
+      console.log(`[ModelDownloadService] 📂 Creating temp directory: ${tempDir}`);
       await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
+      console.log("[ModelDownloadService] ✓ Temp directory created");
 
       const startTime = Date.now();
       const resolvedTotalSize = files.reduce((sum, f) => sum + f.size, 0);
@@ -396,9 +458,21 @@ export class ModelDownloadService {
       let totalBytesDownloaded = 0;
       const fileBytesStart = new Map<string, number>();
 
-      console.log(
-        `[ModelDownloadService] Downloading ${files.length} files, total: ${this.formatBytes(totalSize)}`,
-      );
+      console.log("\n" + "-".repeat(40));
+      console.log(`[ModelDownloadService] 📦 DOWNLOAD PLAN`);
+      console.log(`[ModelDownloadService] Total files: ${files.length}`);
+      console.log(`[ModelDownloadService] Total size: ${this.formatBytes(totalSize)}`);
+      console.log(`[ModelDownloadService] Destination: ${modelPath}`);
+      console.log("-".repeat(40));
+      
+      emitProgress({
+        status: "downloading",
+        phase: "downloading_files",
+        statusMessage: `Preparing to download ${files.length} files...`,
+        totalFiles: files.length,
+        currentFileIndex: 0,
+        percentage: 2,
+      });
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -407,6 +481,12 @@ export class ModelDownloadService {
           0,
           localFilePath.lastIndexOf("/"),
         );
+
+        const fileName = file.path.split("/").pop() || file.path;
+        console.log(`\n[ModelDownloadService] 📥 FILE ${i + 1}/${files.length}`);
+        console.log(`[ModelDownloadService] Name: ${fileName}`);
+        console.log(`[ModelDownloadService] Size: ${this.formatBytes(file.size)}`);
+        console.log(`[ModelDownloadService] Path: ${file.path}`);
 
         await FileSystem.makeDirectoryAsync(localFileDir, {
           intermediates: true,
@@ -422,34 +502,54 @@ export class ModelDownloadService {
             const fileStartBytes = fileBytesStart.get(file.path) || 0;
             totalBytesDownloaded = fileStartBytes + currentFileBytes;
 
-            if (onProgress) {
-              onProgress(
-                this.calculateProgress(
-                  {
-                    totalBytesWritten: totalBytesDownloaded,
-                    totalBytesExpectedToWrite: totalSize,
-                  },
-                  model.id,
-                  startTime,
-                ),
-              );
-            }
+            const baseProgress = this.calculateProgress(
+              {
+                totalBytesWritten: totalBytesDownloaded,
+                totalBytesExpectedToWrite: totalSize,
+              },
+              model.id,
+              startTime,
+            );
+
+            emitProgress({
+              ...baseProgress,
+              phase: "downloading_files",
+              currentFile: fileName,
+              currentFileIndex: i + 1,
+              totalFiles: files.length,
+              statusMessage: `Downloading ${fileName} (${i + 1}/${files.length})`,
+            });
           },
         );
 
         if (!success) {
-          console.error(
-            `[ModelDownloadService] Failed to download file: ${file.path}`,
-          );
+          console.error(`[ModelDownloadService] ❌ Failed to download file: ${file.path}`);
+          emitProgress({
+            status: "error",
+            statusMessage: `Failed to download: ${fileName}`,
+            error: `Download failed for ${file.path}`,
+            currentFile: fileName,
+          });
           await FileSystem.deleteAsync(tempDir, { idempotent: true });
           return false;
         }
 
         totalBytesDownloaded = fileBytesStart.get(file.path)! + file.size;
-        console.log(
-          `[ModelDownloadService] ✓ Downloaded ${i + 1}/${files.length}: ${file.path}`,
-        );
+        console.log(`[ModelDownloadService] ✓ Completed ${i + 1}/${files.length}: ${fileName}`);
       }
+      
+      console.log("\n[ModelDownloadService] ✓ All files downloaded successfully");
+
+      emitProgress({
+        status: "verifying",
+        phase: "finalizing",
+        statusMessage: "Organizing model files...",
+        percentage: 95,
+      });
+
+      console.log("\n" + "-".repeat(40));
+      console.log("[ModelDownloadService] 📦 FINALIZING");
+      console.log("-".repeat(40));
 
       const packageRoot = await resolveModelRoot({
         files,
@@ -462,24 +562,32 @@ export class ModelDownloadService {
       });
 
       if (packageRoot) {
-        console.log(
-          `[ModelDownloadService] Using package root: ${packageRoot}`,
-        );
+        console.log(`[ModelDownloadService] ✓ Package root found: ${packageRoot}`);
       } else {
-        console.warn(
-          "[ModelDownloadService] Unable to locate package root, moving temp directory",
-        );
+        console.warn("[ModelDownloadService] ⚠️ Unable to locate package root, using temp directory");
       }
 
+      console.log(`[ModelDownloadService] 📁 Moving to final location: ${modelPath}`);
       try {
         await FileSystem.moveAsync({
           from: packageRoot ?? tempDir,
           to: modelPath,
         });
+        console.log("[ModelDownloadService] ✓ Files moved successfully");
       } finally {
+        console.log("[ModelDownloadService] 🧹 Cleaning up temp directory...");
         await FileSystem.deleteAsync(tempDir, { idempotent: true });
+        console.log("[ModelDownloadService] ✓ Cleanup complete");
       }
 
+      emitProgress({
+        status: "verifying",
+        phase: "verifying",
+        statusMessage: "Verifying model integrity...",
+        percentage: 98,
+      });
+
+      console.log("\n[ModelDownloadService] 🔍 Verifying model integrity...");
       const verified = await this.verifyDownload(
         model.id,
         modelPath,
@@ -487,28 +595,40 @@ export class ModelDownloadService {
       );
 
       if (verified) {
-        console.log(
-          `[ModelDownloadService] ✓ Download complete: ${model.name}`,
-        );
-        if (onProgress) {
-          onProgress({
-            modelId: model.id,
-            bytesDownloaded: model.size,
-            totalBytes: model.size,
-            percentage: 100,
-            speed: 0,
-            estimatedTimeRemaining: 0,
-            status: "completed",
-          });
-        }
+        const elapsedTime = (Date.now() - startTime) / 1000;
+        console.log("\n" + "=".repeat(60));
+        console.log(`[ModelDownloadService] ✅ DOWNLOAD COMPLETE`);
+        console.log(`[ModelDownloadService] Model: ${model.displayName}`);
+        console.log(`[ModelDownloadService] Total time: ${this.formatTime(elapsedTime)}`);
+        console.log(`[ModelDownloadService] Location: ${modelPath}`);
+        console.log("=".repeat(60) + "\n");
+        
+        emitProgress({
+          bytesDownloaded: model.size,
+          totalBytes: model.size,
+          percentage: 100,
+          status: "completed",
+          statusMessage: "Download complete!",
+          phase: "finalizing",
+        });
         return true;
       } else {
-        console.error("[ModelDownloadService] Verification failed");
+        console.error("[ModelDownloadService] ❌ Verification failed");
+        emitProgress({
+          status: "error",
+          statusMessage: "Model verification failed",
+          error: "Verification failed",
+        });
         await FileSystem.deleteAsync(modelPath, { idempotent: true });
         return false;
       }
     } catch (error) {
-      console.error("[ModelDownloadService] Download failed:", error);
+      console.error("[ModelDownloadService] ❌ Download failed:", error);
+      emitProgress({
+        status: "error",
+        statusMessage: error instanceof Error ? error.message : "Download failed",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
       if (tempDir) {
         await FileSystem.deleteAsync(tempDir, { idempotent: true });
       }
