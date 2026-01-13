@@ -3,7 +3,6 @@ import { Platform } from 'react-native';
 export interface ModelConfig {
   modelName?: string;
   modelPath?: string;
-  modelFormat?: 'coreml' | 'mlx';
   enableEncryption?: boolean;
   maxBatchSize?: number;
   computeUnits?: 'all' | 'cpuAndGPU' | 'cpuOnly';
@@ -59,35 +58,13 @@ interface DolphinCoreMLNativeModule {
     error?: { code: string; message: string };
   }>;
   
-  initializeMLXEngine?(config: MLXEngineConfig): Promise<{
-    success: boolean;
-    engine?: any;
-    error?: { code: string; message: string };
-  }>;
-  
   encodeBatch(texts: string[], options?: EncodingOptions): Promise<number[][]>;
-  
-  encodeWithMLX?(texts: string[], options?: EncodingOptions): Promise<number[][]>;
   
   generateStream(prompt: string, params?: GenerationParameters): Promise<string>;
 
   getMetrics(): Promise<PerformanceMetrics>;
 
   unloadModel(): Promise<boolean>;
-}
-
-export interface MLXEngineConfig {
-  modelId?: string;
-  revision?: string;
-  tokenizerId?: string;
-  localModelPath?: string;
-  vocabSize?: number;
-  contextLength?: number;
-  hiddenSize?: number;
-  heads?: number;
-  layers?: number;
-  seed?: number;
-  maxCacheEntries?: number;
 }
 
 let cachedNativeModule: DolphinCoreMLNativeModule | null = null;
@@ -285,38 +262,6 @@ export class DolphinCoreML {
     
     try {
       console.log('[DolphinCoreML] Initializing with config:', defaultConfig);
-      
-      // If MLX format, initialize MLX engine instead
-      if (defaultConfig.modelFormat === 'mlx' && defaultConfig.modelPath) {
-        console.log('[DolphinCoreML] Initializing MLX engine with local path:', defaultConfig.modelPath);
-        
-        if (this.module.initializeMLXEngine) {
-          const mlxConfig: MLXEngineConfig = {
-            localModelPath: defaultConfig.modelPath,
-            contextLength: 8192,
-            maxCacheEntries: 128,
-          };
-          
-          const mlxResult = await this.module.initializeMLXEngine(mlxConfig);
-          if (mlxResult.success) {
-            this.initialized = true;
-            this.currentModelPath = defaultConfig.modelPath;
-            console.log('[DolphinCoreML] MLX engine initialized successfully');
-            return {
-              success: true,
-              metadata: { modelFormat: 'mlx', modelPath: defaultConfig.modelPath },
-              deviceInfo: {
-                deviceModel: 'iOS',
-                systemVersion: '18.0+',
-                processorCount: 8,
-                physicalMemory: 8589934592,
-                thermalState: 0,
-                isLowPowerModeEnabled: false,
-              }
-            };
-          }
-        }
-      }
       
       const result = await this.module.initialize(defaultConfig);
 
