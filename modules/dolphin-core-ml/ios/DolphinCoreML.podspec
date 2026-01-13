@@ -12,7 +12,7 @@ Pod::Spec.new do |s|
   s.author = { "monGARS" => "dev@example.invalid" }
   s.platforms = { ios: "18.0" }
   s.source = { git: "https://example.invalid/dolphin-core-ml.git", tag: s.version.to_s }
-  s.source_files = "ios/**/*.{h,m,mm,swift}"
+  s.source_files = "*.{h,m,mm,swift}"
   s.requires_arc = true
   s.static_framework = true
   s.swift_version = "5.9"
