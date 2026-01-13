@@ -395,33 +395,54 @@ export const [CognitionProvider, useCognition] = createContextHook(() => {
         telemetry.startTimer("llm_inference");
         
         const loadedModel = modelManager.getLoadedModel();
-        const isLocalModelAvailable = loadedModel != null;
+        const loadedModelId = modelManager.loadedModelId;
+        const isLocalModelAvailable = loadedModel != null && loadedModelId != null;
         
+        console.log(`[Cognition] Model state check:`, {
+          loadedModelId,
+          loadedModelName: loadedModel?.name,
+          isLocalModelAvailable,
+        });
         console.log(
-          `[Cognition] Using model: ${isLocalModelAvailable ? loadedModel!.name + " (LOCAL)" : "Cloud API (GPT-4)"}`,
+          `[Cognition] Using model: ${isLocalModelAvailable ? loadedModel!.name + " (LOCAL)" : "Cloud API"}`,
         );
 
         console.log("[Cognition] Starting inference...");
         telemetry.incrementCounter("inference_started");
 
         let response: string;
-        let inferenceSource: "local" | "cached";
+        let inferenceSource: "local" | "cached" = "local";
         
         if (isLocalModelAvailable) {
           console.log("[Cognition] Using local CoreML model for inference");
-          response = await dolphinCoreML.generate(contextPrompt, {
-            maxTokens: 512,
-            temperature: 0.7,
-            topP: 0.9,
-          });
-          inferenceSource = "local";
-          console.log("[Cognition] Local model response received");
+          try {
+            response = await dolphinCoreML.generate(contextPrompt, {
+              maxTokens: 512,
+              temperature: 0.7,
+              topP: 0.9,
+            });
+            inferenceSource = "local";
+            console.log("[Cognition] Local model response received:", response.substring(0, 100));
+            
+            if (response.includes("simulated response") || 
+                response.includes("Fallback mode") || 
+                response.includes("Placeholder response")) {
+              console.log("[Cognition] Detected fallback/placeholder response, using cloud API instead");
+              response = await generateText({
+                messages: [{ role: "user", content: contextPrompt }],
+              });
+            }
+          } catch (localError) {
+            console.error("[Cognition] Local model generation failed, falling back to cloud:", localError);
+            response = await generateText({
+              messages: [{ role: "user", content: contextPrompt }],
+            });
+          }
         } else {
           console.log("[Cognition] No local model loaded, using cloud API");
           response = await generateText({
             messages: [{ role: "user", content: contextPrompt }],
           });
-          inferenceSource = "local";
         }
         
         telemetry.endTimer("llm_inference", { source: inferenceSource });
