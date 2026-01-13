@@ -57,7 +57,7 @@ jobs:
 
       - name: Clear local credentials
         run: |
-          rm -rf ~/Library/MobileDevice/Provisioning\ Profiles/*
+          rm -rf ~/Library/MobileDevice/Provisioning\ Profiles/* 2>/dev/null || true
           echo "Cleared local provisioning profiles to force EAS remote fetch"
 
       - name: Build iOS (local)
