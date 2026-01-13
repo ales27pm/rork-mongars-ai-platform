@@ -27,12 +27,15 @@
       "distribution": "store",
       "ios": {
         "simulator": false,
-        "credentialsSource": "remote"
+        "credentialsSource": "remote",
+        "autoIncrement": true,
+        "entitlements": {
+          "com.apple.developer.applesignin": ["Default"]
+        }
       },
       "android": {
         "buildType": "app-bundle"
-      },
-      "autoIncrement": true
+      }
     }
   },
   "submit": {
