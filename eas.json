@@ -28,10 +28,7 @@
       "ios": {
         "simulator": false,
         "credentialsSource": "remote",
-        "autoIncrement": true,
-        "entitlements": {
-          "com.apple.developer.applesignin": ["Default"]
-        }
+        "autoIncrement": true
       },
       "android": {
         "buildType": "app-bundle"
