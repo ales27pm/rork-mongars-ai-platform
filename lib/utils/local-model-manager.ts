@@ -1,5 +1,6 @@
 import { dolphinCoreML, ModelConfig, PerformanceMetrics } from '@/lib/modules/DolphinCoreML';
 import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 
 export interface QuantizationConfig {
   type: 'int8' | 'float16' | 'float32';
@@ -35,13 +36,34 @@ export class LocalModelManager {
     return LocalModelManager.instance;
   }
 
-  async initialize(config: ModelConfig = {}): Promise<boolean> {
+  async initialize(config: ModelConfig & { modelPath?: string; modelFormat?: 'coreml' | 'mlx' } = {}): Promise<boolean> {
+    console.log('[LocalModelManager] Initializing with config:', config);
+    
+    // If we're re-initializing with a different model, reset state
+    if (this.isInitialized && this.currentModel !== config.modelName) {
+      console.log('[LocalModelManager] Switching model, resetting state');
+      this.isInitialized = false;
+      await dolphinCoreML.unloadModel();
+    }
+
     if (this.isInitialized) {
-      console.log('[LocalModelManager] Already initialized');
+      console.log('[LocalModelManager] Already initialized with model:', this.currentModel);
       return true;
     }
 
-    console.log('[LocalModelManager] Initializing with config:', config);
+    // Verify model path exists if provided
+    if (config.modelPath && Platform.OS !== 'web') {
+      try {
+        const pathInfo = await FileSystem.getInfoAsync(config.modelPath);
+        if (!pathInfo.exists) {
+          console.error('[LocalModelManager] Model path does not exist:', config.modelPath);
+          return false;
+        }
+        console.log('[LocalModelManager] Model path verified:', config.modelPath);
+      } catch (error) {
+        console.error('[LocalModelManager] Failed to verify model path:', error);
+      }
+    }
 
     try {
       const result = await dolphinCoreML.initialize(config);
@@ -64,6 +86,7 @@ export class LocalModelManager {
 
         console.log('[LocalModelManager] Initialized successfully');
         console.log('[LocalModelManager] Device info:', result.deviceInfo);
+        console.log('[LocalModelManager] Model format:', config.modelFormat || 'coreml');
 
         return true;
       }

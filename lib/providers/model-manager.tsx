@@ -203,9 +203,15 @@ export const [ModelManagerProvider, useModelManager] = createContextHook(() => {
         return false;
       }
 
+      const modelPath = modelDownloadService.getModelPath(modelId, model.format);
+      console.log('[ModelManager] Model path:', modelPath);
+      console.log('[ModelManager] Model format:', model.format);
       console.log('[ModelManager] Initializing CoreML with model:', model.id);
+      
       const success = await localModelManager.initialize({
         modelName: model.id,
+        modelPath: modelPath,
+        modelFormat: model.format,
         enableEncryption: settings.enableEncryption,
         maxBatchSize: settings.maxBatchSize,
         computeUnits: settings.computeUnits,

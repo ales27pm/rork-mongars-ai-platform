@@ -30,7 +30,7 @@ actor DolphinCoreMLState {
     os_log("[DolphinCoreML] Model unloaded and metrics reset")
   }
 
-  func loadModelIfNeeded(modelName: String, computeUnits: MLComputeUnits = .all) throws -> MLModel {
+  func loadModelIfNeeded(modelName: String, modelPath: String? = nil, computeUnits: MLComputeUnits = .all) throws -> MLModel {
     if let existingModel = model {
       return existingModel
     }
@@ -38,11 +38,37 @@ actor DolphinCoreMLState {
     let fileManager = FileManager.default
     var candidateURLs: [URL] = []
 
+    // First priority: explicit model path from config
+    if let explicitPath = modelPath, !explicitPath.isEmpty {
+      // Handle file:// URL prefix
+      let cleanPath: String
+      if explicitPath.hasPrefix("file://") {
+        cleanPath = String(explicitPath.dropFirst(7))
+      } else {
+        cleanPath = explicitPath
+      }
+      
+      let explicitURL = URL(fileURLWithPath: cleanPath)
+      if fileManager.fileExists(atPath: cleanPath) {
+        os_log("[DolphinCoreML] Found model at explicit path: %@", cleanPath)
+        candidateURLs.append(explicitURL)
+      } else {
+        os_log("[DolphinCoreML] Explicit model path does not exist: %@", cleanPath)
+      }
+    }
+
+    // Second priority: documents directory with model name
     if let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first {
       let mlpackagePath = documentsURL.appendingPathComponent("models").appendingPathComponent("\(modelName).mlpackage")
       if fileManager.fileExists(atPath: mlpackagePath.path) {
         os_log("[DolphinCoreML] Found model at: %@", mlpackagePath.path)
         candidateURLs.append(mlpackagePath)
+      }
+      
+      let mlxPath = documentsURL.appendingPathComponent("models").appendingPathComponent("\(modelName).mlx")
+      if fileManager.fileExists(atPath: mlxPath.path) {
+        os_log("[DolphinCoreML] Found MLX model at: %@", mlxPath.path)
+        candidateURLs.append(mlxPath)
       }
       
       let docPath = documentsURL.appendingPathComponent("\(modelName).mlpackage")
@@ -52,6 +78,7 @@ actor DolphinCoreMLState {
       }
     }
 
+    // Third priority: bundle resources
     if let bundleURL = Bundle.main.url(forResource: modelName, withExtension: "mlmodelc") {
       os_log("[DolphinCoreML] Found compiled model in bundle: %@", bundleURL.path)
       candidateURLs.append(bundleURL)
@@ -63,8 +90,8 @@ actor DolphinCoreMLState {
     }
 
     guard let selectedURL = candidateURLs.first else {
-      os_log("[DolphinCoreML] MODEL_NOT_FOUND: %@", modelName)
-      throw NSError(domain: "DolphinCoreML", code: -1, userInfo: [NSLocalizedDescriptionKey: "MODEL_NOT_FOUND: \(modelName)"])
+      os_log("[DolphinCoreML] MODEL_NOT_FOUND: %@ (searched paths: explicit=%@)", modelName, modelPath ?? "none")
+      throw NSError(domain: "DolphinCoreML", code: -1, userInfo: [NSLocalizedDescriptionKey: "MODEL_NOT_FOUND: \(modelName). Searched explicit path: \(modelPath ?? "none")"])
     }
 
     os_log("[DolphinCoreML] Loading model from: %@", selectedURL.path)
@@ -202,14 +229,20 @@ public class DolphinCoreMLModule: Module {
     AsyncFunction("initialize") { (config: [String: Any]) -> [String: Any] in
       if #available(iOS 18.0, *) {
         let modelName = (config["modelName"] as? String) ?? "Dolphin"
+        let modelPath = config["modelPath"] as? String
+        let modelFormat = config["modelFormat"] as? String ?? "coreml"
         let computeUnits = self.computeUnits(from: config["computeUnits"] as? String)
+        
+        self.log.info("[DolphinCoreML] Initialize called with modelName=\(modelName), modelPath=\(modelPath ?? "nil"), format=\(modelFormat)")
+        
         do {
-          _ = try await DolphinCoreMLState.shared.loadModelIfNeeded(modelName: modelName, computeUnits: computeUnits)
+          _ = try await DolphinCoreMLState.shared.loadModelIfNeeded(modelName: modelName, modelPath: modelPath, computeUnits: computeUnits)
           let deviceInfo = self.collectDeviceInfo()
           var metadata = await DolphinCoreMLState.shared.metadata
           metadata["contextLength"] = 8192
           metadata["version"] = "3.0"
           metadata["computeUnits"] = computeUnits.rawValue
+          metadata["modelFormat"] = modelFormat
 
           return [
             "success": true,

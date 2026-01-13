@@ -1,7 +1,9 @@
-import { Platform, NativeModules } from 'react-native';
+import { Platform } from 'react-native';
 
 export interface ModelConfig {
   modelName?: string;
+  modelPath?: string;
+  modelFormat?: 'coreml' | 'mlx';
   enableEncryption?: boolean;
   maxBatchSize?: number;
   computeUnits?: 'all' | 'cpuAndGPU' | 'cpuOnly';
@@ -57,7 +59,15 @@ interface DolphinCoreMLNativeModule {
     error?: { code: string; message: string };
   }>;
   
+  initializeMLXEngine?(config: MLXEngineConfig): Promise<{
+    success: boolean;
+    engine?: any;
+    error?: { code: string; message: string };
+  }>;
+  
   encodeBatch(texts: string[], options?: EncodingOptions): Promise<number[][]>;
+  
+  encodeWithMLX?(texts: string[], options?: EncodingOptions): Promise<number[][]>;
   
   generateStream(prompt: string, params?: GenerationParameters): Promise<string>;
 
@@ -65,6 +75,48 @@ interface DolphinCoreMLNativeModule {
 
   unloadModel(): Promise<boolean>;
 }
+
+export interface MLXEngineConfig {
+  modelId?: string;
+  revision?: string;
+  tokenizerId?: string;
+  localModelPath?: string;
+  vocabSize?: number;
+  contextLength?: number;
+  hiddenSize?: number;
+  heads?: number;
+  layers?: number;
+  seed?: number;
+  maxCacheEntries?: number;
+}
+
+let cachedNativeModule: DolphinCoreMLNativeModule | null = null;
+let nativeModuleLoaded = false;
+
+const loadNativeModule = async (): Promise<DolphinCoreMLNativeModule | null> => {
+  if (nativeModuleLoaded) {
+    return cachedNativeModule;
+  }
+  
+  if (Platform.OS !== 'ios') {
+    nativeModuleLoaded = true;
+    return null;
+  }
+  
+  try {
+    const module = await import('@/modules/dolphin-core-ml');
+    if (module?.default) {
+      cachedNativeModule = module.default as DolphinCoreMLNativeModule;
+      console.log('[DolphinCoreML] Native module loaded successfully');
+    }
+    nativeModuleLoaded = true;
+    return cachedNativeModule;
+  } catch (error) {
+    console.warn('[DolphinCoreML] Failed to load native module:', error);
+    nativeModuleLoaded = true;
+    return null;
+  }
+};
 
 class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
   private modelLoaded = false;
@@ -195,29 +247,34 @@ class DolphinCoreMLFallback implements DolphinCoreMLNativeModule {
 export class DolphinCoreML {
   private module: DolphinCoreMLNativeModule;
   private initialized = false;
+  private currentModelPath: string | null = null;
+  private moduleLoadPromise: Promise<void> | null = null;
   
   constructor() {
-    if (Platform.OS === 'ios') {
-      try {
-        const nativeModule = NativeModules.DolphinCoreML;
-        if (nativeModule) {
-          console.log('[DolphinCoreML] Using native iOS module');
-          this.module = nativeModule as DolphinCoreMLNativeModule;
-        } else {
-          console.warn('[DolphinCoreML] Native module not found, using fallback');
-          this.module = new DolphinCoreMLFallback();
-        }
-      } catch (error) {
-        console.warn('[DolphinCoreML] Failed to load native module, using fallback:', error);
-        this.module = new DolphinCoreMLFallback();
-      }
+    this.module = new DolphinCoreMLFallback();
+    this.moduleLoadPromise = this.loadModule();
+  }
+  
+  private async loadModule(): Promise<void> {
+    const nativeModule = await loadNativeModule();
+    if (nativeModule) {
+      console.log('[DolphinCoreML] Using native iOS module via Expo');
+      this.module = nativeModule;
     } else {
-      console.log('[DolphinCoreML] Non-iOS platform, using fallback');
-      this.module = new DolphinCoreMLFallback();
+      console.log('[DolphinCoreML] Native module not available, using fallback');
+    }
+  }
+  
+  private async ensureModuleLoaded(): Promise<void> {
+    if (this.moduleLoadPromise) {
+      await this.moduleLoadPromise;
+      this.moduleLoadPromise = null;
     }
   }
   
   async initialize(config: ModelConfig = {}) {
+    await this.ensureModuleLoaded();
+    
     const defaultConfig: ModelConfig = {
       modelName: 'Dolphin',
       enableEncryption: true,
@@ -227,6 +284,40 @@ export class DolphinCoreML {
     };
     
     try {
+      console.log('[DolphinCoreML] Initializing with config:', defaultConfig);
+      
+      // If MLX format, initialize MLX engine instead
+      if (defaultConfig.modelFormat === 'mlx' && defaultConfig.modelPath) {
+        console.log('[DolphinCoreML] Initializing MLX engine with local path:', defaultConfig.modelPath);
+        
+        if (this.module.initializeMLXEngine) {
+          const mlxConfig: MLXEngineConfig = {
+            localModelPath: defaultConfig.modelPath,
+            contextLength: 8192,
+            maxCacheEntries: 128,
+          };
+          
+          const mlxResult = await this.module.initializeMLXEngine(mlxConfig);
+          if (mlxResult.success) {
+            this.initialized = true;
+            this.currentModelPath = defaultConfig.modelPath;
+            console.log('[DolphinCoreML] MLX engine initialized successfully');
+            return {
+              success: true,
+              metadata: { modelFormat: 'mlx', modelPath: defaultConfig.modelPath },
+              deviceInfo: {
+                deviceModel: 'iOS',
+                systemVersion: '18.0+',
+                processorCount: 8,
+                physicalMemory: 8589934592,
+                thermalState: 0,
+                isLowPowerModeEnabled: false,
+              }
+            };
+          }
+        }
+      }
+      
       const result = await this.module.initialize(defaultConfig);
 
       if (!result.success) {
@@ -236,6 +327,8 @@ export class DolphinCoreML {
       }
 
       this.initialized = result.success;
+      this.currentModelPath = defaultConfig.modelPath || defaultConfig.modelName || null;
+      console.log('[DolphinCoreML] Initialization successful, model:', this.currentModelPath);
       return result;
     } catch (error) {
       console.error('[DolphinCoreML] Initialization failed:', error);
