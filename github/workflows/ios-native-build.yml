@@ -28,6 +28,9 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 120
 
+    env:
+      EAS_PROJECT_ID: 0d0be6e6-1e32-4981-ae88-240dc8c7ee89
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
