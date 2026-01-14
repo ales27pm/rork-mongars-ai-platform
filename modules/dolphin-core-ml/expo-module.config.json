@@ -1,9 +1,9 @@
 {
-  "platforms": [],
+  "platforms": ["ios", "android"],
   "ios": {
-    "modules": []
+    "modules": ["DolphinCoreMLModule"]
   },
   "android": {
-    "modules": []
+    "modules": ["app.mongars.dolphincoreml.DolphinCoreMLModule"]
   }
 }
