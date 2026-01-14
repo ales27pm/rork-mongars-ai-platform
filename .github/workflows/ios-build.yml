@@ -1,4 +1,4 @@
-name: iOS Build (CocoaPods + SPM)
+name: iOS Build + Sign + Submit (EAS)
 
 on:
   workflow_dispatch:
@@ -6,121 +6,85 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ios-eas-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  ios-build:
-    runs-on: macos-latest
+  ios-eas:
+    # EAS Build runs on Expo's workers, so this job does not need macOS.
+    runs-on: ubuntu-latest
+
     env:
-      BUNDLE_FORCE_RUBY_PLATFORM: true
+      CI: '1'
+      # Required: create this GitHub Actions secret in your repo settings.
+      # It must be an Expo/EAS access token (Expo account settings -> Access Tokens).
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      # Optional but recommended: store your ASC API key contents in base64 form.
+      # If you store the raw .p8 (multiline) instead, the workflow will handle that too.
+      ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Ruby & gems
-        uses: ruby/setup-ruby@v1
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          ruby-version: '3.2'
-          bundler-cache: true
-
-      - name: Print Ruby, Bundler & gem info
-        run: |
-          which ruby
-          ruby -v
-          gem env
-          bundler -v
-
-      - name: Remove previous gems and project artifacts
-        run: |
-          gem uninstall -aIx || true
-          rm -rf vendor/bundle
-          rm -rf ios/Pods ios/Podfile.lock ios/build ios/monGARS.xcworkspace
-          rm -rf $HOME/Library/Developer/Xcode/DerivedData
-
-      - name: Install Homebrew dependencies
-        run: |
-          brew install cocoapods
-          brew install node
-
-      - name: Install bun (if needed)
-        run: npm install -g bun
+          node-version: 20
+          cache: yarn
 
       - name: Install JS dependencies
-        run: yarn install --frozen-lockfile || npm install
-
-      - name: Bundle install (Ruby gems)
-        env:
-          BUNDLE_FORCE_RUBY_PLATFORM: true
         run: |
-          rm -rf vendor/bundle
-          bundle install --jobs 4 --force
+          corepack enable
+          yarn --version
+          yarn install --frozen-lockfile
 
-      - name: Patch cocoapods-spm if needed
+      - name: Install EAS CLI
+        run: |
+          npm i -g eas-cli
+          eas --version
+
+      - name: Prepare App Store Connect API key file
+        shell: bash
         run: |
           set -euo pipefail
 
-          # Some CI environments don't expose the bundled cocoapods-spm version constant
-          # where the plugin expects it.
-          bundle exec ruby -e "require 'fileutils'; spec = Gem::Specification.find_by_name('cocoapods-spm'); gem_dir = spec.gem_dir; gem_version_path = File.join(gem_dir, 'lib', 'cocoapods-spm', 'gem_version.rb'); unless File.exist?(gem_version_path); FileUtils.mkdir_p(File.dirname(gem_version_path)); File.write(gem_version_path, \"module CocoapodsSpm\n  GEM_VERSION = '#{spec.version}'\nend\n\"); puts \"patched cocoapods-spm gem_version.rb at #{gem_version_path}\"; end"
+          # The submit profile in eas.json expects:
+          #   credentials/ios/AuthKey_8H354F29PN.p8
+          mkdir -p credentials/ios
 
-          # cocoapods-spm 0.1.20 assumes CocoaPods always generates the per-config
-          # xcfilelist files for the embed frameworks / copy resources scripts.
-          # When a project has *no* resources for a given target/config, CocoaPods
-          # may legitimately skip generating the resources xcfilelists, causing an
-          # ENOENT in cocoapods-spm's post_integrate hooks.
-          #
-          # Patch the plugin to create missing xcfilelists on the fly.
-          python3 - <<'PY'
-          import pathlib
-          import subprocess
+          if [ -z "${ASC_API_KEY_P8:-}" ]; then
+            echo "ASC_API_KEY_P8 secret is missing. Add it (base64 of the .p8, or the raw .p8 contents)." >&2
+            exit 1
+          fi
 
-          gem_dir = subprocess.check_output(
-              [
-                  "bundle",
-                  "exec",
-                  "ruby",
-                  "-e",
-                  "require 'rubygems'; print Gem::Specification.find_by_name('cocoapods-spm').gem_dir",
-              ]
-          ).decode("utf-8")
+          # If the secret looks like a raw .p8, write it directly.
+          if echo "$ASC_API_KEY_P8" | grep -q "BEGIN PRIVATE KEY"; then
+            printf "%s\n" "$ASC_API_KEY_P8" > credentials/ios/AuthKey_8H354F29PN.p8
+          else
+            # Otherwise assume it's base64.
+            echo "$ASC_API_KEY_P8" | base64 -d > credentials/ios/AuthKey_8H354F29PN.p8
+          fi
 
-          p = pathlib.Path(gem_dir) / "lib" / "cocoapods-spm" / "hooks" / "helpers" / "update_script.rb"
-          src = p.read_text(encoding="utf-8")
+          chmod 600 credentials/ios/AuthKey_8H354F29PN.p8
 
-          needle = 'target.send(method_name, config).open("r+") do |f|'
-          if needle not in src:
-              raise SystemExit(f"Expected pattern not found in {p}")
+          echo "Wrote credentials/ios/AuthKey_8H354F29PN.p8"
 
-          if "file_path = target.send(method_name, config)" in src:
-              print(f"cocoapods-spm already patched: {p}")
-              raise SystemExit(0)
-
-          patched = src.replace(
-              needle,
-              "file_path = target.send(method_name, config)\n"
-              "            FileUtils.mkdir_p(file_path.dirname) unless file_path.dirname.exist?\n"
-              "            file_path.write(\"\") unless file_path.exist?\n"
-              "            file_path.open(\"r+\") do |f|",
-          )
-
-          # Ensure FileUtils is available.
-          if "require 'fileutils'" not in patched:
-              patched = "require 'fileutils'\n" + patched
-
-          p.write_text(patched, encoding="utf-8")
-          print(f"Patched cocoapods-spm update_script.rb: {p}")
-          PY
-
-      - name: Install CocoaPods dependencies
+      - name: EAS Build (iOS, production)
         run: |
-          bundle exec pod install --project-directory=ios
+          set -euo pipefail
+          # Build on EAS workers (signing handled via credentialsSource=remote).
+          eas build --platform ios --profile production --non-interactive --wait
 
-      - name: Build iOS app
+      - name: EAS Submit (iOS, production)
         run: |
-          cd ios
-          xcodebuild -workspace monGARS.xcworkspace -scheme monGARS -configuration Release -sdk iphoneos
+          set -euo pipefail
+          # Submits the most recent iOS build using the submit profile in eas.json.
+          eas submit --platform ios --profile production --non-interactive --latest
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-artifacts
-          path: ios/build/Release-iphoneos/
+      - name: Show latest build info
+        if: always()
+        run: |
+          eas build:list --platform ios --limit 5 --non-interactive || true
