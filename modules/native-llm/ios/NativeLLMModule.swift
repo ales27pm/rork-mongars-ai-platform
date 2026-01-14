@@ -1,3 +1,4 @@
+
 import Foundation
 import CoreML
 import React
@@ -64,8 +65,9 @@ class NativeLLMModule: NSObject, RCTBridgeModule {
   }
 
   private func sendEvent(_ body: [String: Any]) {
-    DispatchQueue.main.async {
-      RCTSharedApplication()?.sendAction(#selector(RCTDeviceEventEmitter.emitEvent(_:)), to: nil, from: body, for: nil)
+    if let bridge = self.value(forKey: "bridge") as? RCTBridge,
+       let eventEmitter = bridge.module(for: RCTEventEmitter.self) as? RCTEventEmitter {
+      eventEmitter.sendEvent(withName: "NativeLLMEvent", body: body)
     }
   }
 }
