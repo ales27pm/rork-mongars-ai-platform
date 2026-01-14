@@ -18,7 +18,6 @@ jobs:
     env:
       CI: "1"
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
 
     steps:
       - name: Checkout
@@ -28,18 +27,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          # Do NOT enable dependency caching here unless a lockfile exists.
-          # This repo does not currently include yarn.lock/package-lock.json/pnpm-lock.yaml.
 
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Install dependencies
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f yarn.lock ]; then
+          if [ -f bun.lockb ] || [ -f bun.lock ]; then
+            echo "Using Bun"
+            bun --version
+            bun install --no-progress
+          elif [ -f yarn.lock ]; then
             echo "Using Yarn with lockfile"
+            corepack enable
             yarn --version
             yarn install --frozen-lockfile --non-interactive
           elif [ -f package-lock.json ]; then
@@ -47,44 +51,19 @@ jobs:
             npm ci
           elif [ -f pnpm-lock.yaml ]; then
             echo "Using pnpm with lockfile"
+            corepack enable
             corepack prepare pnpm@latest --activate
             pnpm --version
             pnpm install --frozen-lockfile
           else
-            echo "No lockfile found; installing with Yarn (no frozen lockfile)"
-            yarn --version || npm i -g yarn
-            yarn install --non-interactive
+            echo "No lockfile found; falling back to npm install"
+            npm install
           fi
 
       - name: Install EAS CLI
         run: |
           npm i -g eas-cli
           eas --version
-
-      - name: Prepare App Store Connect API key file
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # The submit profile in eas.json expects:
-          #   credentials/ios/AuthKey_8H354F29PN.p8
-          mkdir -p credentials/ios
-
-          if [ -z "${ASC_API_KEY_P8:-}" ]; then
-            echo "ASC_API_KEY_P8 secret is missing. Add it (base64 of the .p8, or the raw .p8 contents)." >&2
-            exit 1
-          fi
-
-          # If the secret looks like a raw .p8, write it directly.
-          if echo "$ASC_API_KEY_P8" | grep -q "BEGIN PRIVATE KEY"; then
-            printf "%s\n" "$ASC_API_KEY_P8" > credentials/ios/AuthKey_8H354F29PN.p8
-          else
-            # Otherwise assume it's base64.
-            echo "$ASC_API_KEY_P8" | base64 -d > credentials/ios/AuthKey_8H354F29PN.p8
-          fi
-
-          chmod 600 credentials/ios/AuthKey_8H354F29PN.p8
-          echo "Wrote credentials/ios/AuthKey_8H354F29PN.p8"
 
       - name: EAS Build (iOS, production)
         run: |
