@@ -24,7 +24,7 @@ plugins {
   id("expo-autolinking-settings")
 }
 
-apply from: new File(["node", "--print", "require.resolve('expo/scripts/autolinking')"].execute(null, rootDir).text.trim())
+// apply from: new File(["node", "--print", "require.resolve('expo/scripts/autolinking')"].execute(null, rootDir).text.trim())
 
 extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
   if (System.getenv('EXPO_USE_COMMUNITY_AUTOLINKING') == '1') {
