@@ -33,7 +33,7 @@ spm_pkg "mlx-swift", :git => "https://github.com/ml-explore/mlx-swift", :commit 
 spm_pkg "mlx-swift-examples", :git => "https://github.com/ml-explore/mlx-swift-examples", :commit => "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631", :products => ["MLXLLM", "MLXVLM", "MLXLMCommon", "MLXMNIST", "MLXEmbedders", "StableDiffusion"]
 spm_pkg "swift-transformers", :git => "https://github.com/huggingface/swift-transformers", :version => "1.0.0", :products => ["Transformers"]
 end
-pod 'DolphinCoreML', :path => '../modules/dolphin-core-ml/ios'
+pod 'NativeLLM', :path => '../modules/native-llm/ios'
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
