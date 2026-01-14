@@ -1,73 +1,105 @@
 
 import Foundation
 import CoreML
-import React
+import ExpoModulesCore
+import os
 
-@objc(NativeLLMModule)
-class NativeLLMModule: NSObject, RCTBridgeModule {
-  static func moduleName() -> String! { "native-llm" }
-  static func requiresMainQueueSetup() -> Bool { false }
-
+public class NativeLLMModule: Module {
+  private let logger = Logger(subsystem: "com.rork.native-llm", category: "NativeLLM")
   private var engine: CoreMLLlamaEngine?
 
-  @objc(loadModel:resolver:rejecter:)
-  func loadModel(params: NSDictionary, resolver: RCTPromiseResolveBlock, rejecter: RCTPromiseRejectBlock) {
-    guard let modelPath = params["modelPath"] as? String else {
-      rejecter("LOAD_ERROR", "Missing modelPath", nil)
-      return
+  public func definition() -> ModuleDefinition {
+    Name("native-llm")
+    Events("llmEvent")
+
+    AsyncFunction("loadModel") { (params: [String: Any]) throws -> [String: Any] in
+      guard let modelPath = params["modelPath"] as? String else {
+        self.logger.error("Load failed: missing modelPath")
+        throw NSError(domain: "NativeLLM", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing modelPath"])
+      }
+      do {
+        self.engine = try CoreMLLlamaEngine(modelPath: modelPath)
+        self.logger.info("Loaded CoreML model at \(modelPath, privacy: .private)")
+        return ["ok": true, "engine": "coreml"]
+      } catch {
+        self.logger.error("Load failed: \(error.localizedDescription, privacy: .public)")
+        throw error
+      }
     }
-    do {
-      engine = try CoreMLLlamaEngine(modelPath: modelPath)
-      resolver(["ok": true, "engine": "coreml"])
-    } catch {
-      rejecter("LOAD_ERROR", "Failed to load model", error)
+
+    AsyncFunction("unloadModel") { () -> [String: Any] in
+      self.engine = nil
+      self.logger.info("Unloaded CoreML model")
+      return ["ok": true]
     }
-  }
 
-  @objc(generate:resolver:rejecter:)
-  func generate(params: NSDictionary, resolver: @escaping RCTPromiseResolveBlock, rejecter: @escaping RCTPromiseRejectBlock) {
-    guard let engine = engine else {
-      rejecter("GEN_ERROR", "Model not loaded", nil)
-      return
+    AsyncFunction("generate") { (params: [String: Any]) throws -> [String: Any] in
+      guard let engine = self.engine else {
+        self.logger.error("Generate failed: model not loaded")
+        throw NSError(domain: "NativeLLM", code: 2, userInfo: [NSLocalizedDescriptionKey: "Model not loaded"])
+      }
+      let prompt = params["prompt"] as? String ?? ""
+      let maxTokens = params["maxTokens"] as? Int ?? 128
+      let temperature = params["temperature"] as? Double ?? 0.8
+      let topK = params["topK"] as? Int ?? 40
+      let seed = params["seed"] as? Int ?? 0
+      let requestId = UUID().uuidString
+      engine.generate(
+        requestId: requestId,
+        prompt: prompt,
+        maxTokens: maxTokens,
+        temperature: temperature,
+        topK: topK,
+        seed: seed,
+        onToken: { reqId, token in
+          self.sendEvent("llmEvent", [
+            "type": "token",
+            "requestId": reqId,
+            "token": token,
+          ])
+        },
+        onDone: { reqId, output, tokens, ms in
+          self.sendEvent("llmEvent", [
+            "type": "done",
+            "requestId": reqId,
+            "output": output,
+            "tokens": tokens,
+            "ms": ms,
+          ])
+        },
+        onError: { reqId, message in
+          self.sendEvent("llmEvent", [
+            "type": "error",
+            "requestId": reqId,
+            "message": message,
+          ])
+        }
+      )
+      return ["requestId": requestId]
     }
-    let prompt = params["prompt"] as? String ?? ""
-    let maxTokens = params["maxTokens"] as? Int ?? 128
-    let temperature = params["temperature"] as? Double ?? 0.8
-    let topK = params["topK"] as? Int ?? 40
-    let seed = params["seed"] as? Int ?? 0
-    let requestId = UUID().uuidString
-    engine.generate(requestId: requestId, prompt: prompt, maxTokens: maxTokens, temperature: temperature, topK: topK, seed: seed, onToken: { reqId, token in
-      self.sendEvent(["type": "token", "requestId": reqId, "token": token])
-    }, onDone: { reqId, output, tokens, ms in
-      self.sendEvent(["type": "done", "requestId": reqId, "output": output, "tokens": tokens, "ms": ms])
-      resolver(["requestId": reqId])
-    }, onError: { reqId, message in
-      self.sendEvent(["type": "error", "requestId": reqId, "message": message])
-      rejecter("GEN_ERROR", message, nil)
-    })
-  }
 
-  @objc(stop:resolver:rejecter:)
-  func stop(requestId: String, resolver: RCTPromiseResolveBlock, rejecter: RCTPromiseRejectBlock) {
-    engine?.stop(requestId: requestId)
-    resolver(["ok": true])
-  }
+    AsyncFunction("stop") { (requestId: String) -> [String: Any] in
+      self.engine?.stop(requestId: requestId)
+      self.logger.info("Stopped generation for \(requestId, privacy: .private)")
+      return ["ok": true]
+    }
 
-  @objc(status:)
-  func status(resolver: RCTPromiseResolveBlock) {
-    let loaded = engine != nil
-    resolver(["loaded": loaded, "engine": "coreml", "version": "coreml-native"])
-  }
+    AsyncFunction("status") { () -> [String: Any] in
+      let loaded = self.engine != nil
+      return ["loaded": loaded, "engine": "coreml", "version": "coreml-native"]
+    }
 
-  @objc(health:)
-  func health(resolver: RCTPromiseResolveBlock) {
-    resolver(["ok": true, "details": "Native LLM healthy"])
-  }
+    AsyncFunction("health") { () -> [String: Any] in
+      return ["ok": true, "details": "Native LLM healthy"]
+    }
 
-  private func sendEvent(_ body: [String: Any]) {
-    if let bridge = self.value(forKey: "bridge") as? RCTBridge,
-       let eventEmitter = bridge.module(for: RCTEventEmitter.self) as? RCTEventEmitter {
-      eventEmitter.sendEvent(withName: "NativeLLMEvent", body: body)
+    AsyncFunction("embed") { (_ text: String) throws -> [String: Any] in
+      self.logger.error("Embeddings are not supported on iOS CoreML engine")
+      throw NSError(
+        domain: "NativeLLM",
+        code: 3,
+        userInfo: [NSLocalizedDescriptionKey: "Embeddings are not supported on iOS CoreML engine"]
+      )
     }
   }
 }
