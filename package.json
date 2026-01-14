@@ -2,6 +2,13 @@
   "name": "expo-app",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "expo": {
+    "doctor": {
+      "appConfigFieldsNotSyncedCheck": {
+        "enabled": false
+      }
+    }
+  },
   "scripts": {
     "start": "npx rork start -p 2agpgihkxtu4agpk7y6uc --tunnel",
     "start-web": "npx rork start -p 2agpgihkxtu4agpk7y6uc --web --tunnel",
