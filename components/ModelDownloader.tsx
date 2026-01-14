@@ -13,6 +13,7 @@ const MODEL_URLS = {
   ios: {
     model: "https://your-server.com/model.mlpackage",
     tokenizer: "https://your-server.com/tokenizer.json",
+    tokenizerConfig: "https://your-server.com/tokenizer_config.json",
   },
 };
 
@@ -37,9 +38,11 @@ export const downloadIOSModel = async () => {
   await makeDirectoryAsync(dir, { intermediates: true });
   const modelPath = dir + "model.mlpackage";
   const tokenizerPath = dir + "tokenizer.json";
+  const tokenizerConfigPath = dir + "tokenizer_config.json";
   await downloadAsync(MODEL_URLS.ios.model, modelPath);
   await downloadAsync(MODEL_URLS.ios.tokenizer, tokenizerPath);
-  return { modelPath, tokenizerPath };
+  await downloadAsync(MODEL_URLS.ios.tokenizerConfig, tokenizerConfigPath);
+  return { modelPath, tokenizerPath, tokenizerConfigPath };
 };
 
 export default function ModelDownloader({
@@ -58,9 +61,10 @@ export default function ModelDownloader({
         const path = await downloadAndroidModel();
         setStatus("Android model downloaded: " + path);
       } else {
-        const { modelPath, tokenizerPath } = await downloadIOSModel();
+        const { modelPath, tokenizerPath, tokenizerConfigPath } =
+          await downloadIOSModel();
         setStatus(
-          `iOS model downloaded: ${modelPath}\nTokenizer: ${tokenizerPath}`,
+          `iOS model downloaded: ${modelPath}\nTokenizer: ${tokenizerPath}\nTokenizer config: ${tokenizerConfigPath}`,
         );
       }
     } catch (e: any) {

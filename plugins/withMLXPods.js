@@ -12,7 +12,7 @@ const PLUGIN_LINE = "plugin 'cocoapods-spm'";
 const SPM_LINES = [
   'spm_pkg "mlx-swift", :git => "https://github.com/ml-explore/mlx-swift", :commit => "072b684acaae80b6a463abab3a103732f33774bf", :products => ["MLX", "MLXRandom", "MLXNN", "MLXOptimizers", "MLXFFT", "MLXLinalg", "MLXFast"]',
   'spm_pkg "mlx-swift-examples", :git => "https://github.com/ml-explore/mlx-swift-examples", :commit => "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631", :products => ["MLXLLM", "MLXVLM", "MLXLMCommon", "MLXMNIST", "MLXEmbedders", "StableDiffusion"]',
-  'spm_pkg "swift-transformers", :git => "https://github.com/huggingface/swift-transformers", :version => "1.0.0", :products => ["Transformers"]',
+  'spm_pkg "swift-transformers", :git => "https://github.com/huggingface/swift-transformers", :version => "1.0.0", :products => ["Tokenizers", "Transformers"]',
 ];
 
 const ensureMLXPods = (podfile) => {
@@ -20,7 +20,12 @@ const ensureMLXPods = (podfile) => {
   const hasRequireBlock = podfile.includes("require 'cocoapods-spm'");
   const localPodLine = `pod 'DolphinCoreML', :path => '../modules/dolphin-core-ml/ios'`;
   const hasLocalPod = podfile.includes(localPodLine);
-  if (hasRequireBlock && podfile.includes(PLUGIN_LINE) && hasAllSpmLines && hasLocalPod) {
+  if (
+    hasRequireBlock &&
+    podfile.includes(PLUGIN_LINE) &&
+    hasAllSpmLines &&
+    hasLocalPod
+  ) {
     return podfile;
   }
 
