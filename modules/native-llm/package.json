@@ -1,0 +1,13 @@
+{
+"name": "native-llm",
+"version": "1.0.0",
+"main": "index.ts",
+"expo": {
+  "autolinking": {
+    "nativeModulesDir": "."
+  }
+},
+"dependencies": {
+  "expo-modules-core": "*"
+}
+}
