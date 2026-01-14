@@ -251,7 +251,7 @@ export class DolphinCoreML {
   
   async initialize(config: ModelConfig = {}) {
     await this.ensureModuleLoaded();
-    
+
     const defaultConfig: ModelConfig = {
       modelName: 'Dolphin',
       enableEncryption: true,
@@ -259,10 +259,28 @@ export class DolphinCoreML {
       computeUnits: 'all',
       ...config
     };
-    
+
+    // Check if the fallback is being used (native module not available)
+    if (this.module instanceof DolphinCoreMLFallback) {
+      const platform = (typeof Platform !== 'undefined' && Platform.OS) ? Platform.OS : 'unknown';
+      const message =
+        `[DolphinCoreML] Native module not found.\n` +
+        `This feature requires a custom iOS development build.\n` +
+        `Current platform: ${platform}.\n` +
+        `To use DolphinCoreML, run \'eas build --profile development --platform ios\' and install the app on your device or simulator.`;
+      console.warn(message);
+      // Optionally, you can throw or just return a failed result
+      return {
+        success: false,
+        error: {
+          code: 'NATIVE_MODULE_NOT_FOUND',
+          message,
+        },
+      };
+    }
+
     try {
       console.log('[DolphinCoreML] Initializing with config:', defaultConfig);
-      
       const result = await this.module.initialize(defaultConfig);
 
       if (!result.success) {
