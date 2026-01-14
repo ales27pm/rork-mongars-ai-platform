@@ -6,45 +6,30 @@ if [[ "${EAS_BUILD_PLATFORM:-}" != "ios" ]]; then
   exit 0
 fi
 
-install_gem() {
-  local gem_name="$1"
-  local gem_version="$2"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
 
-  if gem list -i "$gem_name" -v "$gem_version" >/dev/null 2>&1; then
-    echo "✅ $gem_name ($gem_version) already installed"
-    return 0
-  fi
+export GEM_HOME="${GEM_HOME:-$HOME/.gem}"
+export GEM_PATH="${GEM_HOME}:${GEM_PATH:-}"
+export PATH="${GEM_HOME}/bin:${PATH}"
 
-  echo "⬇️ Installing $gem_name ($gem_version)"
-  if sudo -n true 2>/dev/null; then
-    sudo gem install "$gem_name" -v "$gem_version" --no-document --source https://rubygems.org
-  else
-    gem install "$gem_name" -v "$gem_version" --no-document --source https://rubygems.org
-  fi
-}
+echo "eas-pre-install: GEM_HOME=$GEM_HOME"
 
-verify_gem() {
-  local gem_name="$1"
-  if ruby -e "require '${gem_name}'" >/dev/null 2>&1; then
-    echo "✅ $gem_name is loadable"
-    return 0
-  fi
-  return 1
-}
-
-install_gem "cocoapods" "~> 1.15"
-install_gem "cocoapods-spm" "~> 0.1"
-
-if ! verify_gem "cocoapods-spm"; then
-  echo "⚠️ cocoapods-spm not loadable after install, attempting latest release"
-  if sudo -n true 2>/dev/null; then
-    sudo gem install "cocoapods-spm" --no-document --source https://rubygems.org
-  else
-    gem install "cocoapods-spm" --no-document --source https://rubygems.org
-  fi
-  if ! verify_gem "cocoapods-spm"; then
-    echo "⚠️ cocoapods-spm still not loadable; continuing without SPM integration"
-  fi
+if ! command -v bundle >/dev/null 2>&1; then
+  echo "eas-pre-install: installing bundler"
+  gem install bundler --no-document
 fi
 
-echo "✅ cocoapods and cocoapods-spm ready for iOS build"
+if [[ -f "Gemfile" ]]; then
+  echo "eas-pre-install: running bundle install"
+  bundle config set path "${BUNDLE_PATH:-$HOME/.bundle}" >/dev/null
+  bundle install --jobs 4 --retry 3
+else
+  echo "eas-pre-install: Gemfile not found at repo root; skipping bundle install"
+fi
+
+echo "eas-pre-install: verifying cocoapods + cocoapods-spm"
+bundle exec ruby -e "require 'cocoapods'; require 'cocoapods-spm'; puts 'OK: cocoapods + cocoapods-spm'"
+bundle exec pod --version
+
+echo "✅ Ruby deps ready for iOS build"
