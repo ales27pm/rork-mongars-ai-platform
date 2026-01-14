@@ -1,4 +1,3 @@
-begin
 
 # --- BEGIN: RubyGems and cocoapods-spm bootstrap ---
 require 'rbconfig'
