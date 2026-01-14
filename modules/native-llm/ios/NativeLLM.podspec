@@ -11,11 +11,11 @@ Pod::Spec.new do |s|
   s.license = { type: "UNLICENSED" }
   s.author = { "monGARS" => "dev@example.invalid" }
   s.platforms = { ios: "15.0" }
-  s.source = { :path => "." }
+  s.source = { path: "." }
   s.source_files = "*.swift", "Tokenizer/**/*.swift"
   s.requires_arc = true
   s.static_framework = true
   s.swift_version = "5.9"
   s.dependency "ExpoModulesCore"
-  s.spm_dependency "swift-transformers/Tokenizers"
+  spm_dependency "swift-transformers/Tokenizers"
 end
