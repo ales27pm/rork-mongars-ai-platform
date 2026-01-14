@@ -12,7 +12,8 @@
     "test": "jest --runInBand",
     "postinstall": "patch-package",
     "android": "expo run:android",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "format": "bash ./scripts/format.sh"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

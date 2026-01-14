@@ -1,16 +1,14 @@
-# NOTE: cocoapods-spm must be loaded *before* Expo/React-Native pod helpers.
-gem_home = ENV['GEM_HOME'] || File.join(Dir.home, '.gem')
-ENV['GEM_HOME'] = gem_home
-ENV['GEM_PATH'] = [gem_home, ENV['GEM_PATH']].compact.join(File::PATH_SEPARATOR)
-ENV['PATH'] = [File.join(gem_home, 'bin'), ENV['PATH']].compact.join(File::PATH_SEPARATOR)
-
-unless Gem::Specification.find_all_by_name('cocoapods-spm').any?
-  system('gem', 'install', 'cocoapods-spm', '-v', '0.1.20', '--no-document') ||
-    raise('Failed to install cocoapods-spm. Ensure RubyGems is available in the build environment.')
+begin
+  require 'cocoapods-spm'
+rescue LoadError => e
+  raise "cocoapods-spm must be available before pod install. Run bundle install and ensure cocoapods-spm is in the Gemfile. Original error: #{e.message}"
 end
 
-require 'cocoapods-spm'
 plugin 'cocoapods-spm'
+
+unless defined?(spm_pkg)
+  raise 'cocoapods-spm is not loaded (spm_pkg undefined). Tokenizers/MLX SPM deps cannot be installed.'
+end
 
 require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
 require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
@@ -21,7 +19,7 @@ podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties
 def ccache_enabled?(podfile_properties)
   # Environment variable takes precedence
   return ENV['USE_CCACHE'] == '1' if ENV['USE_CCACHE']
-  
+
   # Fall back to Podfile properties
   podfile_properties['apple.ccacheEnabled'] == 'true'
 end
@@ -36,26 +34,24 @@ prepare_react_native_project!
 
 target 'monGARS' do
   use_expo_modules!
-  if defined?(spm_pkg)
-    spm_pkg "mlx-swift",
-      :git => "https://github.com/ml-explore/mlx-swift",
-      :commit => "072b684acaae80b6a463abab3a103732f33774bf",
-      :products => ["MLX", "MLXRandom", "MLXNN", "MLXOptimizers", "MLXFFT", "MLXLinalg", "MLXFast"]
-    spm_pkg "mlx-swift-examples",
-      :git => "https://github.com/ml-explore/mlx-swift-examples",
-      :commit => "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631",
-      :products => ["MLXLLM", "MLXVLM", "MLXLMCommon", "MLXMNIST", "MLXEmbedders", "StableDiffusion"]
-    spm_pkg "swift-transformers",
-      :git => "https://github.com/huggingface/swift-transformers",
-      :version => "1.0.0",
-      :products => ["Tokenizers", "Transformers"]
-  else
-    raise("cocoapods-spm is not loaded (spm_pkg undefined). Tokenizers/MLX SPM deps cannot be installed.")
-  end
+
+  spm_pkg "mlx-swift",
+    :git => "https://github.com/ml-explore/mlx-swift",
+    :commit => "072b684acaae80b6a463abab3a103732f33774bf",
+    :products => ["MLX", "MLXRandom", "MLXNN", "MLXOptimizers", "MLXFFT", "MLXLinalg", "MLXFast"]
+  spm_pkg "mlx-swift-examples",
+    :git => "https://github.com/ml-explore/mlx-swift-examples",
+    :commit => "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631",
+    :products => ["MLXLLM", "MLXVLM", "MLXLMCommon", "MLXMNIST", "MLXEmbedders", "StableDiffusion"]
+  spm_pkg "swift-transformers",
+    :git => "https://github.com/huggingface/swift-transformers",
+    :version => "1.0.0",
+    :products => ["Tokenizers", "Transformers"]
+
   pod 'NativeLLM', :path => '../modules/native-llm/ios'
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
-    config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
+    config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"]; 
   else
     config_command = [
       'npx',
