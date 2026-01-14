@@ -28,8 +28,10 @@ jobs:
         run: |
           npm install -g bun
 
-      - name: Force install all Ruby gems for macOS ARM64
+      - name: Clean previous gems and set Ruby platform
         run: |
+          rm -rf vendor/bundle
+          export BUNDLE_FORCE_RUBY_PLATFORM=true
           bundle install --force --jobs 4
 
       - name: Patch cocoapods-spm if needed
