@@ -28,12 +28,14 @@ prepare_react_native_project!
 
 target 'monGARS' do
   use_expo_modules!
-if defined?(spm_pkg)
-spm_pkg "mlx-swift", :git => "https://github.com/ml-explore/mlx-swift", :commit => "072b684acaae80b6a463abab3a103732f33774bf", :products => ["MLX", "MLXRandom", "MLXNN", "MLXOptimizers", "MLXFFT", "MLXLinalg", "MLXFast"]
-spm_pkg "mlx-swift-examples", :git => "https://github.com/ml-explore/mlx-swift-examples", :commit => "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631", :products => ["MLXLLM", "MLXVLM", "MLXLMCommon", "MLXMNIST", "MLXEmbedders", "StableDiffusion"]
-spm_pkg "swift-transformers", :git => "https://github.com/huggingface/swift-transformers", :version => "1.0.0", :products => ["Tokenizers", "Transformers"]
-end
-pod 'NativeLLM', :path => '../modules/native-llm/ios'
+  if defined?(spm_pkg)
+    spm_pkg "mlx-swift", :git => "https://github.com/ml-explore/mlx-swift", :commit => "072b684acaae80b6a463abab3a103732f33774bf", :products => ["MLX", "MLXRandom", "MLXNN", "MLXOptimizers", "MLXFFT", "MLXLinalg", "MLXFast"]
+    spm_pkg "mlx-swift-examples", :git => "https://github.com/ml-explore/mlx-swift-examples", :commit => "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631", :products => ["MLXLLM", "MLXVLM", "MLXLMCommon", "MLXMNIST", "MLXEmbedders", "StableDiffusion"]
+    spm_pkg "swift-transformers",
+      :url => "https://github.com/huggingface/swift-transformers.git",
+      :tag => "1.0.0"
+  end
+  pod 'NativeLLM', :path => '../modules/native-llm/ios'
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
