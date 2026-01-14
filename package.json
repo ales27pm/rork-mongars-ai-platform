@@ -3,9 +3,9 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "bunx rork start -p 2agpgihkxtu4agpk7y6uc --tunnel",
-    "start-web": "bunx rork start -p 2agpgihkxtu4agpk7y6uc --web --tunnel",
-    "start-web-dev": "DEBUG=expo* bunx rork start -p 2agpgihkxtu4agpk7y6uc --web --tunnel",
+    "start": "npx rork start -p 2agpgihkxtu4agpk7y6uc --tunnel",
+    "start-web": "npx rork start -p 2agpgihkxtu4agpk7y6uc --web --tunnel",
+    "start-web-dev": "DEBUG=expo* npx rork start -p 2agpgihkxtu4agpk7y6uc --web --tunnel",
     "eas-build-pre-install": "bash ./scripts/eas-pre-install.sh",
     "eas-build-pre-build": "bash ./scripts/eas-pre-build.sh",
     "lint": "expo lint",

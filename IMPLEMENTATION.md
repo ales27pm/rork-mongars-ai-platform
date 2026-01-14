@@ -262,6 +262,64 @@ const token = securityManager.generateSecureToken(32);
 const hash = await securityManager.hashData('important data');
 ```
 
+---
+
+# Native LLM Integration Guide
+
+## 1. Model Download
+- Use `components/ModelDownloader.tsx` to download models at runtime.
+- Android: `.gguf` → `FileSystem.documentDirectory/models/model.gguf`
+- iOS: `.mlpackage` and `tokenizer.json` → `FileSystem.documentDirectory/models/`
+
+## 2. Loading Model in JS
+```ts
+import { loadModel } from '../modules/native-llm/js/nativeLLM';
+
+// After download
+await loadModel({ modelPath: localPath });
+```
+
+## 3. Generating Text
+```ts
+import { generate, addLLMListener } from '../modules/native-llm/js/nativeLLM';
+
+const { requestId } = await generate({ prompt: 'Hello world', maxTokens: 128 });
+
+const subscription = addLLMListener(event => {
+  if (event.type === 'token') {
+    // Handle token
+  } else if (event.type === 'done') {
+    // Handle completion
+  } else if (event.type === 'error') {
+    // Handle error
+  }
+});
+```
+
+## 4. Stopping Generation
+```ts
+import { stop } from '../modules/native-llm/js/nativeLLM';
+await stop(requestId);
+```
+
+## 5. Status & Health
+```ts
+import { status, health } from '../modules/native-llm/js/nativeLLM';
+const info = await status();
+const healthInfo = await health();
+```
+
+## 6. CI & Build
+- Use npx in scripts for EAS compatibility.
+- Download models in CI if needed (see README.md for example steps).
+
+## 7. Notes
+- Always verify model file integrity before loading.
+- Do not commit large model files to the repo.
+- Use platform-specific paths for model loading.
+
+---
+
 ## 🔧 Configuration
 
 ### App Configuration (`app.json`)

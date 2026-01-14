@@ -38,6 +38,14 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+ 
+# Native LLM model files
+modules/native-llm/android/src/main/cpp/third_party/llama.cpp/
+filesDir/models/*.gguf
+Application Support/models/*.mlpackage
+Application Support/models/tokenizer.json
+ios/Documents/*.mlpackage
+ios/Documents/tokenizer.json
 .vercel
 
 .rork
