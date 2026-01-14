@@ -1,3 +1,4 @@
+jobs:
 name: iOS Build (CocoaPods + SPM)
 
 on:
@@ -6,19 +7,18 @@ on:
     branches:
       - main
 
-jobs:
-        - name: Print Ruby and Bundler versions
-          run: |
-            ruby -v
-            which ruby
-            gem env
-            bundler -v
+
   ios-build:
     runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+      - name: Print Ruby and Bundler versions
+        run: |
+          ruby -v
+          which ruby
+          gem env
+          bundler -v
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
