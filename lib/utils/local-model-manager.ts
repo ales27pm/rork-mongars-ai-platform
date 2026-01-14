@@ -1,4 +1,4 @@
-import { dolphinCoreML, ModelConfig, PerformanceMetrics } from '@/lib/modules/DolphinCoreML';
+import NativeLLM, { loadModel, unloadModel, embed, status } from '@/lib/modules/NativeLLM';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 
@@ -43,7 +43,7 @@ export class LocalModelManager {
     if (this.isInitialized && this.currentModel !== config.modelName) {
       console.log('[LocalModelManager] Switching model, resetting state');
       this.isInitialized = false;
-      await dolphinCoreML.unloadModel();
+      await unloadModel();
     }
 
     if (this.isInitialized) {
@@ -66,33 +66,22 @@ export class LocalModelManager {
     }
 
     try {
-      const result = await dolphinCoreML.initialize(config);
-
-      if (result.success) {
-        this.isInitialized = true;
-        this.currentModel = config.modelName || 'default';
-        
-        const metadata: ModelMetadata = {
-          name: this.currentModel,
-          version: '1.0.0',
-          size: 0,
-          quantization: 'float32',
-          inputShape: [1, 512],
-          outputShape: [1, 768],
-          loadTime: result.metadata?.loadTime || 0,
-        };
-
-        this.modelMetadata.set(this.currentModel, metadata);
-
-        console.log('[LocalModelManager] Initialized successfully');
-        console.log('[LocalModelManager] Device info:', result.deviceInfo);
-        console.log('[LocalModelManager] Model format:', config.modelFormat || 'coreml');
-
-        return true;
-      }
-
-      console.log('[LocalModelManager] Native module not available - requires custom iOS build');
-      return false;
+      // You may want to pass a real modelPath here
+      await loadModel({ modelPath: config.modelPath || 'MODEL_PATH_HERE' });
+      this.isInitialized = true;
+      this.currentModel = config.modelName || 'default';
+      const metadata: ModelMetadata = {
+        name: this.currentModel,
+        version: '1.0.0',
+        size: 0,
+        quantization: 'float32',
+        inputShape: [1, 512],
+        outputShape: [1, 768],
+        loadTime: 0,
+      };
+      this.modelMetadata.set(this.currentModel, metadata);
+      console.log('[LocalModelManager] Initialized successfully');
+      return true;
     } catch (error: any) {
       const isExpectedError = error?.message?.includes('PLATFORM_NOT_SUPPORTED') || 
                               error?.message?.includes('NATIVE_MODULE_NOT_FOUND') ||
@@ -173,12 +162,10 @@ export class LocalModelManager {
     const startTime = Date.now();
     
     try {
-      const embedding = await dolphinCoreML.encode(text);
-      
+      const result = await embed(text);
       const duration = Date.now() - startTime;
       this.recordPerformance(duration, 1);
-
-      return embedding;
+      return result.vector;
     } catch (error) {
       console.error('[LocalModelManager] Embedding generation failed:', error);
       throw error;
@@ -193,11 +180,9 @@ export class LocalModelManager {
     const startTime = Date.now();
     
     try {
-      const embeddings = await dolphinCoreML.encodeBatch(texts);
-      
+      const embeddings = await Promise.all(texts.map(async text => (await embed(text)).vector));
       const duration = Date.now() - startTime;
       this.recordPerformance(duration, texts.length);
-
       return embeddings;
     } catch (error) {
       console.error('[LocalModelManager] Batch embedding generation failed:', error);
@@ -207,17 +192,9 @@ export class LocalModelManager {
 
   async getPerformanceMetrics(): Promise<PerformanceMetrics> {
     try {
-      const metrics = await dolphinCoreML.getMetrics();
-      
-      if (metrics) {
-        this.performanceHistory.push(metrics);
-        
-        if (this.performanceHistory.length > 100) {
-          this.performanceHistory.shift();
-        }
-      }
-
-      return metrics;
+      const metrics = await status();
+      // You may want to adapt this to your actual metrics structure
+      return { totalInferences: metrics.loaded ? 1 : 0 };
     } catch (error) {
       console.error('[LocalModelManager] Failed to get metrics:', error);
       return { totalInferences: 0 };

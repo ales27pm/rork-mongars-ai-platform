@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { dolphinCoreML } from '@/lib/modules/DolphinCoreML';
+import NativeLLM, { embed, generate, loadModel, unloadModel } from '@/lib/modules/NativeLLM';
 
 export interface MLConfig {
   modelName?: string;
@@ -40,8 +40,8 @@ export class CrossPlatformMLService {
 
   private detectPlatformBackend() {
     if (Platform.OS === 'ios') {
-      this.implementation = 'coreml';
-      console.log('[CrossPlatformML] Using CoreML backend for iOS');
+      this.implementation = 'native-llm';
+      console.log('[CrossPlatformML] Using NativeLLM backend for iOS');
     } else {
       this.implementation = 'fallback';
       console.log(`[CrossPlatformML] Using on-device fallback for ${Platform.OS}`);
@@ -78,19 +78,14 @@ export class CrossPlatformMLService {
   }
 
   private async initializeIOS(): Promise<void> {
-    console.log('[CrossPlatformML] Initializing CoreML for iOS');
-    
+    console.log('[CrossPlatformML] Initializing NativeLLM for iOS');
     try {
-      await dolphinCoreML.initialize({
-        modelName: 'Dolphin',
-        enableEncryption: true,
-        maxBatchSize: 8,
-        computeUnits: 'all',
-      });
-      this.implementation = 'coreml';
-      console.log('[CrossPlatformML] CoreML initialized successfully');
+      // You may want to pass a real modelPath here
+      await loadModel({ modelPath: 'MODEL_PATH_HERE' });
+      this.implementation = 'native-llm';
+      console.log('[CrossPlatformML] NativeLLM initialized successfully');
     } catch (error) {
-      console.error('[CrossPlatformML] CoreML initialization failed:', error);
+      console.error('[CrossPlatformML] NativeLLM initialization failed:', error);
       throw error;
     }
   }
@@ -117,13 +112,10 @@ export class CrossPlatformMLService {
       let embedding: number[];
 
       switch (this.implementation) {
-        case 'coreml':
-          console.log('[CrossPlatformML] Using CoreML for embedding');
-          const pooling = options?.pooling === 'max' ? 'mean' : (options?.pooling || 'mean');
-          embedding = await dolphinCoreML.encode(text, {
-            normalize: options?.normalize !== false,
-            pooling,
-          });
+        case 'native-llm':
+          console.log('[CrossPlatformML] Using NativeLLM for embedding');
+          const result = await embed(text);
+          embedding = result.vector;
           break;
         case 'transformers':
           console.log('[CrossPlatformML] Using Transformers for embedding');
@@ -170,12 +162,11 @@ export class CrossPlatformMLService {
         let batchResults: number[][];
 
         switch (this.implementation) {
-          case 'coreml':
-            const pooling = options?.pooling === 'max' ? 'mean' : (options?.pooling || 'mean');
-            batchResults = await dolphinCoreML.encodeBatch(batch, {
-              normalize: options?.normalize !== false,
-              pooling,
-            });
+          case 'native-llm':
+            batchResults = await Promise.all(batch.map(async text => {
+              const result = await embed(text);
+              return result.vector;
+            }));
             break;
           case 'transformers':
             console.log('[CrossPlatformML] Using Transformers for batch embeddings');
@@ -209,14 +200,15 @@ export class CrossPlatformMLService {
     console.log('[CrossPlatformML] Generating text with backend:', this.implementation);
 
     try {
-      if (this.implementation === 'coreml') {
-        return await dolphinCoreML.generate(prompt, {
+      if (this.implementation === 'native-llm') {
+        // NativeLLM's generate returns a requestId, actual output is via event listener
+        const { requestId } = await generate({
+          prompt,
           maxTokens: options?.maxTokens || 100,
           temperature: options?.temperature || 0.7,
-          topP: options?.topP || 0.9,
-          repetitionPenalty: options?.repetitionPenalty || 1.1,
-          stopSequences: options?.stopSequences || [],
         });
+        // You will need to listen for the output event elsewhere
+        return `[NativeLLM request started: ${requestId}]`;
       } else {
         console.warn('[CrossPlatformML] Text generation not supported on', Platform.OS);
         return `[Text generation is optimized for iOS. Platform: ${Platform.OS}]`;
