@@ -16,13 +16,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      CI: '1'
-      # Required: create this GitHub Actions secret in your repo settings.
-      # It must be an Expo/EAS access token (Expo account settings -> Access Tokens).
+      CI: "1"
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-
-      # Optional but recommended: store your ASC API key contents in base64 form.
-      # If you store the raw .p8 (multiline) instead, the workflow will handle that too.
       ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
 
     steps:
@@ -33,13 +28,33 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: yarn
+          # Do NOT enable dependency caching here unless a lockfile exists.
+          # This repo does not currently include yarn.lock/package-lock.json/pnpm-lock.yaml.
 
-      - name: Install JS dependencies
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        shell: bash
         run: |
-          corepack enable
-          yarn --version
-          yarn install --frozen-lockfile
+          set -euo pipefail
+          if [ -f yarn.lock ]; then
+            echo "Using Yarn with lockfile"
+            yarn --version
+            yarn install --frozen-lockfile --non-interactive
+          elif [ -f package-lock.json ]; then
+            echo "Using npm ci"
+            npm ci
+          elif [ -f pnpm-lock.yaml ]; then
+            echo "Using pnpm with lockfile"
+            corepack prepare pnpm@latest --activate
+            pnpm --version
+            pnpm install --frozen-lockfile
+          else
+            echo "No lockfile found; installing with Yarn (no frozen lockfile)"
+            yarn --version || npm i -g yarn
+            yarn install --non-interactive
+          fi
 
       - name: Install EAS CLI
         run: |
@@ -69,19 +84,16 @@ jobs:
           fi
 
           chmod 600 credentials/ios/AuthKey_8H354F29PN.p8
-
           echo "Wrote credentials/ios/AuthKey_8H354F29PN.p8"
 
       - name: EAS Build (iOS, production)
         run: |
           set -euo pipefail
-          # Build on EAS workers (signing handled via credentialsSource=remote).
           eas build --platform ios --profile production --non-interactive --wait
 
       - name: EAS Submit (iOS, production)
         run: |
           set -euo pipefail
-          # Submits the most recent iOS build using the submit profile in eas.json.
           eas submit --platform ios --profile production --non-interactive --latest
 
       - name: Show latest build info
