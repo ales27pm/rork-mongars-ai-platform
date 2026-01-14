@@ -1,33 +1,116 @@
-const appConfig = require("./app.json");
 
-const expoConfig = appConfig.expo ?? {};
-
-// Prefer explicit CI overrides when you intentionally want to change slug per-environment.
-const resolvedSlug =
-  process.env.EXPO_APP_SLUG ?? process.env.EAS_PROJECT_SLUG ?? expoConfig.slug;
-
-// EAS expects expo.extra.eas.projectId to be the *actual* project ID.
-// In CI it's common to accidentally set EAS_PROJECT_ID to something else (slug/name).
-// To avoid breaking builds, only accept env var values that look like a real project ID.
 const looksLikeUuid = (value) =>
   typeof value === "string" &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
 const rawEnvProjectId = process.env.EAS_PROJECT_ID;
-const configProjectId = expoConfig.extra?.eas?.projectId;
-
+const configProjectId = "0d0be6e6-1e32-4981-ae88-240dc8c7ee89";
 const projectId = looksLikeUuid(rawEnvProjectId)
   ? rawEnvProjectId
   : configProjectId;
 
-const extra = { ...(expoConfig.extra ?? {}) };
-if (projectId) {
-  extra.eas = { ...(extra.eas ?? {}), projectId };
-}
+const resolvedSlug =
+  process.env.EXPO_APP_SLUG ?? process.env.EAS_PROJECT_SLUG ?? "rork-mongars";
 
 module.exports = {
-  ...expoConfig,
-  owner: expoConfig.owner ?? "ales27pm",
+  name: "monGARS",
   slug: resolvedSlug,
-  extra,
+  version: "1.0.0",
+  orientation: "portrait",
+  icon: "./assets/images/icon.png",
+  scheme: "rork-app",
+  userInterfaceStyle: "automatic",
+  newArchEnabled: true,
+  splash: {
+    image: "./assets/images/splash-icon.png",
+    resizeMode: "contain",
+    backgroundColor: "#ffffff"
+  },
+  ios: {
+    supportsTablet: false,
+    bundleIdentifier: "app.27pm.monGARS",
+    infoPlist: {
+      UIBackgroundModes: ["audio", "location"],
+      NSMicrophoneUsageDescription: "Allow $(PRODUCT_NAME) to record audio for voice questions and commands.",
+      NSFaceIDUsageDescription: "Allow $(PRODUCT_NAME) to access your Face ID biometric data.",
+      NSContactsUsageDescription: "Allow access to contacts to enable AI assistant to find people in your address book.",
+      NSCalendarsUsageDescription: "Allow $(PRODUCT_NAME) to access your calendar",
+      NSRemindersUsageDescription: "Allow $(PRODUCT_NAME) to access your reminders",
+      NSLocationAlwaysAndWhenInUseUsageDescription: "Allow $(PRODUCT_NAME) to use your location.",
+      NSLocationAlwaysUsageDescription: "Allow $(PRODUCT_NAME) to use your location.",
+      NSLocationWhenInUseUsageDescription: "Allow $(PRODUCT_NAME) to use your location.",
+      NSPhotoLibraryUsageDescription: "Allow $(PRODUCT_NAME) to access your photos",
+      NSCameraUsageDescription: "Allow $(PRODUCT_NAME) to access your camera"
+    },
+    config: {
+      usesNonExemptEncryption: false
+    },
+    usesAppleSignIn: true,
+    accessesContactNotes: true
+  },
+  android: {
+    adaptiveIcon: {
+      foregroundImage: "./assets/images/adaptive-icon.png",
+      backgroundColor: "#ffffff"
+    },
+    package: "com.rork.mongars",
+    permissions: [
+      "android.permission.VIBRATE",
+      "android.permission.RECORD_AUDIO",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
+      "android.permission.INTERNET",
+      "android.permission.READ_CONTACTS",
+      "android.permission.WRITE_CONTACTS",
+      "android.permission.READ_CALENDAR",
+      "android.permission.WRITE_CALENDAR",
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_LOCATION",
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "RECORD_AUDIO",
+      "READ_CALENDAR",
+      "WRITE_CALENDAR",
+      "CAMERA",
+      "READ_EXTERNAL_STORAGE",
+      "WRITE_EXTERNAL_STORAGE",
+      "READ_CONTACTS",
+      "WRITE_CONTACTS",
+      "ACCESS_COARSE_LOCATION",
+      "ACCESS_FINE_LOCATION",
+      "FOREGROUND_SERVICE",
+      "FOREGROUND_SERVICE_LOCATION",
+      "ACCESS_BACKGROUND_LOCATION",
+      "INTERNET"
+    ]
+  },
+  web: {
+    favicon: "./assets/images/favicon.png"
+  },
+  plugins: [
+    ["expo-router", { origin: "https://rork.com/" }],
+    "expo-font",
+    "expo-web-browser",
+    ["expo-av", { microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone" }],
+    ["expo-secure-store", { configureAndroidBackup: true, faceIDPermission: "Allow $(PRODUCT_NAME) to access your Face ID biometric data." }],
+    ["expo-build-properties", { ios: { deploymentTarget: "18.0" } }],
+    "./plugins/withMLXPods",
+    "expo-apple-authentication",
+    ["expo-contacts", { contactsPermission: "Allow $(PRODUCT_NAME) to access your contacts." }],
+    ["expo-calendar", { calendarPermission: "The app needs to access your calendar." }],
+    ["expo-location", { isAndroidForegroundServiceEnabled: true, isAndroidBackgroundLocationEnabled: true, isIosBackgroundLocationEnabled: true, locationAlwaysAndWhenInUsePermission: "Allow $(PRODUCT_NAME) to use your location." }],
+    ["expo-image-picker", { photosPermission: "The app accesses your photos to let you share them with your friends." }]
+  ],
+  experiments: {
+    typedRoutes: true
+  },
+  extra: {
+    eas: {
+      projectId
+    }
+  },
+  owner: "ales27pm"
 };
