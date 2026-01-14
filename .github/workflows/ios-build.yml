@@ -9,50 +9,58 @@ on:
 jobs:
   ios-build:
     runs-on: macos-latest
+    env:
+      BUNDLE_FORCE_RUBY_PLATFORM: true
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Print Ruby and Bundler versions
-        run: |
-          ruby -v
-          which ruby
-          gem env
-          bundler -v
-      - name: Install JS dependencies
-        run: |
-          yarn install --frozen-lockfile || npm install
-          which ruby
-          gem env
-          bundler -v
-      - name: Set up Ruby
+
+      - name: Set up Ruby & gems
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
           bundler-cache: true
-      - name: Print Ruby versions and paths
+
+      - name: Print Ruby, Bundler & gem info
         run: |
           which ruby
           ruby -v
           gem env
-          ls -l /opt/homebrew/Cellar/ruby/ || true
-          ls -l /Users/runner/hostedtoolcache/Ruby/ || true
-      - name: Remove all previous gems
+          bundler -v
+
+      - name: Remove previous gems and project artifacts
         run: |
           gem uninstall -aIx || true
           rm -rf vendor/bundle
+          rm -rf ios/Pods ios/Podfile.lock ios/build ios/monGARS.xcworkspace
+          rm -rf $HOME/Library/Developer/Xcode/DerivedData
+
       - name: Install Homebrew dependencies
         run: |
           brew install cocoapods
           brew install node
+
       - name: Install bun (if needed)
-        run: |
-          npm install -g bun
-      - name: Clean previous gems and set Ruby platform
+        run: npm install -g bun
+
+      - name: Install JS dependencies
+        run: yarn install --frozen-lockfile || npm install
+
+      - name: Bundle install (Ruby gems)
         env:
           BUNDLE_FORCE_RUBY_PLATFORM: true
         run: |
           rm -rf vendor/bundle
-          bundle install --force --jobs 4
+          bundle install --jobs 4 --force
+
+      - name: Ensure GEM_HOME/GEM_PATH
+        run: |
+          echo "GEM_HOME: $GEM_HOME"
+          echo "GEM_PATH: $GEM_PATH"
+          export GEM_HOME=$(ruby -e 'print Gem.default_dir')
+          export GEM_PATH=$(ruby -e 'print Gem.path.join(":")')
+
       - name: Patch cocoapods-spm if needed
         run: |
           bundle exec ruby -e "
@@ -62,21 +70,24 @@ jobs:
             gem_version_path = File.join(gem_dir, 'lib', 'cocoapods-spm', 'gem_version.rb')
             unless File.exist?(gem_version_path)
               FileUtils.mkdir_p(File.dirname(gem_version_path))
-              File.write(gem_version_path, \"module CocoapodsSpm\\n  GEM_VERSION = '#{spec.version}'\\nend\\n\")
-              puts \"patched cocoapods-spm gem_version.rb at #{gem_version_path}\"
+              File.write(gem_version_path, "module CocoapodsSpm\n  GEM_VERSION = '#{spec.version}'\nend\n")
+              puts "patched cocoapods-spm gem_version.rb at #{gem_version_path}"
             end
           "
-      - name: Clean Pods, workspace, and DerivedData
-        run: |
-          rm -rf ios/Pods ios/Podfile.lock ios/build ios/monGARS.xcworkspace
-          rm -rf $HOME/Library/Developer/Xcode/DerivedData
+
       - name: Install CocoaPods dependencies
         run: |
+          export GEM_HOME=$(ruby -e 'print Gem.default_dir')
+          export GEM_PATH=$(ruby -e 'print Gem.path.join(":")')
           bundle exec pod install --project-directory=ios
-      # Add your build steps here, e.g. Xcode build, archive, export, etc.
-      # Example:
-      # - name: Build iOS app
-      #   run: |
-      #     cd ios
-      #     xcodebuild -workspace monGARS.xcworkspace -scheme monGARS -configuration Release -sdk iphoneos
-      # You can also upload artifacts, e.g. .ipa files, using actions/upload-artifact
+
+      - name: Build iOS app
+        run: |
+          cd ios
+          xcodebuild -workspace monGARS.xcworkspace -scheme monGARS -configuration Release -sdk iphoneos
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-artifacts
+          path: ios/build/Release-iphoneos/
