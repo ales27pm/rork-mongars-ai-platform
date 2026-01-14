@@ -8,19 +8,23 @@
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
+        "credentialsSource": "remote",
         "simulator": true
       },
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "credentialsSource": "remote"
       }
     },
     "preview": {
       "distribution": "internal",
       "ios": {
+        "credentialsSource": "remote",
         "simulator": false
       },
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "credentialsSource": "remote"
       }
     },
     "production": {
@@ -31,7 +35,8 @@
         "autoIncrement": true
       },
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "credentialsSource": "remote"
       }
     }
   },
