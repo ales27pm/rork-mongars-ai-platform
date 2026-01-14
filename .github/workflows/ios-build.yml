@@ -66,8 +66,10 @@ jobs:
               puts \"patched cocoapods-spm gem_version.rb at #{gem_version_path}\"
             end
           "
-      - name: Clean Pods and Podfile.lock
-        run: rm -rf ios/Pods ios/Podfile.lock ios/build
+      - name: Clean Pods, workspace, and DerivedData
+        run: |
+          rm -rf ios/Pods ios/Podfile.lock ios/build ios/monGARS.xcworkspace
+          rm -rf $HOME/Library/Developer/Xcode/DerivedData
       - name: Install CocoaPods dependencies
         run: |
           bundle exec pod install --project-directory=ios
