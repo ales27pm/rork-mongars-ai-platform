@@ -12,13 +12,13 @@ public class NativeLLMModule: Module {
     Name("native-llm")
     Events("llmEvent")
 
-    AsyncFunction("loadModel") { (params: [String: Any]) throws -> [String: Any] in
+    AsyncFunction("loadModel") { (params: [String: Any]) async throws -> [String: Any] in
       guard let modelPath = params["modelPath"] as? String else {
         self.logger.error("Load failed: missing modelPath")
         throw NSError(domain: "NativeLLM", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing modelPath"])
       }
       do {
-        self.engine = try CoreMLLlamaEngine(modelPath: modelPath)
+        self.engine = try await CoreMLLlamaEngine(modelPath: modelPath)
         self.logger.info("Loaded CoreML model at \(modelPath, privacy: .private)")
         return ["ok": true, "engine": "coreml"]
       } catch {

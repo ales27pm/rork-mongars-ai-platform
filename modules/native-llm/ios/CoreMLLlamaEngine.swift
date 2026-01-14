@@ -7,12 +7,13 @@ class CoreMLLlamaEngine {
   private let tokenizer: Tokenizer
   private var activeTasks: [String: Task<Void, Never>] = [:]
 
-  init(modelPath: String) throws {
+  init(modelPath: String) async throws {
     let config = MLModelConfiguration()
     config.computeUnits = .cpuAndGPU
-    let url = URL(fileURLWithPath: modelPath)
-    self.model = try MLModel(contentsOf: url, configuration: config)
-    self.tokenizer = try Tokenizer(modelPath: modelPath + "/tokenizer.model")
+    let modelURL = URL(fileURLWithPath: modelPath)
+    self.model = try MLModel(contentsOf: modelURL, configuration: config)
+    let modelFolder = modelURL.deletingLastPathComponent().path
+    self.tokenizer = try await Tokenizer(modelFolder: modelFolder)
   }
 
   func generate(requestId: String, prompt: String, maxTokens: Int, temperature: Double, topK: Int, seed: Int, onToken: @escaping (String, String) -> Void, onDone: @escaping (String, String, Int, Int) -> Void, onError: @escaping (String, String) -> Void) {
