@@ -4,6 +4,7 @@
     "modules": ["NativeLLMModule"]
   },
   "android": {
-    "modules": ["com.offllm.nativellm.NativeLLMModule"]
+    "modules": ["com.offllm.nativellm.NativeLLMModule"],
+    "cmakeListsPath": "src/main/cpp/CMakeLists.txt"
   }
 }

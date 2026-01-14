@@ -1,4 +1,4 @@
-import { requireNativeModule, EventEmitter, NativeModule } from "expo-modules-core";
+import { requireNativeModule, EventEmitter, NativeModule, EventSubscription } from "expo-modules-core";
 
 interface NativeLLMModuleInterface extends NativeModule {
   loadModel(params: LoadModelParams): Promise<{ ok: true; engine: string }>;
@@ -11,12 +11,12 @@ interface NativeLLMModuleInterface extends NativeModule {
 }
 
 const NativeModuleInstance = requireNativeModule<NativeLLMModuleInterface>("native-llm");
-// @ts-ignore: NativeModule vs EventEmitter strictness
-const emitter = new EventEmitter(NativeModuleInstance);
 
-export type Subscription = {
-  remove: () => void;
-};
+const emitter = new EventEmitter(NativeModuleInstance as any);
+
+export type Subscription = EventSubscription;
+
+
 
 export type LLMProgressEvent =
   | { type: "status"; requestId?: string; message: string }
@@ -40,9 +40,8 @@ export type LoadModelParams = {
   useGpu?: boolean;       // Force GPU usage (default true)
 };
 
-export function addLLMListener(cb: (e: LLMProgressEvent) => void): Subscription {
-  // @ts-ignore: Event name strictness
-  return emitter.addListener("llmEvent", cb);
+export function addLLMListener(cb: (e: LLMProgressEvent) => void): EventSubscription {
+  return (emitter as any).addListener("llmEvent", cb);
 }
 
 export async function loadModel(params: LoadModelParams): Promise<{ ok: true; engine: string }> {
