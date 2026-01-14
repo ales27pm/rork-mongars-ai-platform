@@ -33,6 +33,30 @@ export const hfUrl = ({
   return `https://huggingface.co/${repo}/resolve/${revision}/${path}`;
 };
 
+// Cross-platform fetch with timeout (works in React Native, Node, browser)
+function fetchWithTimeout(
+  resource: RequestInfo,
+  options: RequestInit = {},
+  timeout = 10000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const { signal, ...restOptions } = options;
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort();
+    } else {
+      signal.addEventListener("abort", () => controller.abort(), {
+        once: true,
+      });
+    }
+  }
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  return fetch(resource, { ...restOptions, signal: controller.signal }).finally(
+    () => clearTimeout(timeoutId),
+  );
+}
+
 export const listRepoFiles = async ({
   repo,
   revision = DEFAULT_REVISION,
@@ -40,19 +64,13 @@ export const listRepoFiles = async ({
 }: HuggingFaceListRepoOptions): Promise<string[]> => {
   const url = `https://huggingface.co/api/models/${repo}/tree/${revision}?recursive=1`;
 
-// Cross-platform fetch with timeout (works in React Native, Node, browser)
-function fetchWithTimeout(resource: RequestInfo, options: RequestInit = {}, timeout = 10000): Promise<Response> {
-  return Promise.race([
-    fetch(resource, options),
-    new Promise<Response>((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout')), timeout)
-    ),
-  ]);
-}
-
-  const response = await fetchWithTimeout(url, {
-    headers: buildHeaders(accessToken),
-  }, 10000);
+  const response = await fetchWithTimeout(
+    url,
+    {
+      headers: buildHeaders(accessToken),
+    },
+    10000,
+  );
 
   if (!response.ok) {
     throw new Error(
