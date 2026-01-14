@@ -24,16 +24,37 @@ Gem.refresh
 begin
   require 'cocoapods-spm'
 rescue LoadError => e
-  raise <<~MSG
-    cocoapods-spm must be available before pod install.
-    Ensure the iOS build installs Ruby gems (bundle install) and that GEM_HOME/GEM_PATH
-    are visible to the CocoaPods phase.
+  # EAS build workers may invoke CocoaPods without running Bundler first.
+  # Self-heal by installing cocoapods-spm into GEM_HOME (user-writable) and retry.
+  spm_version = ENV.fetch('COCOAPODS_SPM_VERSION', '0.1.20')
+  puts "[Podfile] cocoapods-spm missing (#{e.message}). Attempting install cocoapods-spm@#{spm_version} into #{ENV['GEM_HOME']}…"
 
-    Expected GEM_HOME: #{ENV['GEM_HOME']}
-    GEM_PATH: #{ENV['GEM_PATH']}
+  install_ok = system(
+    { 'GEM_HOME' => ENV['GEM_HOME'], 'GEM_PATH' => ENV['GEM_PATH'] },
+    RbConfig.ruby,
+    '-S',
+    'gem',
+    'install',
+    'cocoapods-spm',
+    '-v',
+    spm_version,
+    '--no-document'
+  )
 
-    Original error: #{e.message}
-  MSG
+  unless install_ok
+    raise <<~MSG
+      cocoapods-spm must be available before pod install.
+      Auto-install attempt failed.
+
+      GEM_HOME: #{ENV['GEM_HOME']}
+      GEM_PATH: #{ENV['GEM_PATH']}
+
+      Original error: #{e.message}
+    MSG
+  end
+
+  Gem.refresh
+  require 'cocoapods-spm'
 end
 
 plugin 'cocoapods-spm'
