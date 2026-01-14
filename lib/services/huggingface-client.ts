@@ -39,10 +39,20 @@ export const listRepoFiles = async ({
   accessToken,
 }: HuggingFaceListRepoOptions): Promise<string[]> => {
   const url = `https://huggingface.co/api/models/${repo}/tree/${revision}?recursive=1`;
-  const response = await fetch(url, {
+
+// Cross-platform fetch with timeout (works in React Native, Node, browser)
+function fetchWithTimeout(resource: RequestInfo, options: RequestInit = {}, timeout = 10000): Promise<Response> {
+  return Promise.race([
+    fetch(resource, options),
+    new Promise<Response>((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout')), timeout)
+    ),
+  ]);
+}
+
+  const response = await fetchWithTimeout(url, {
     headers: buildHeaders(accessToken),
-    signal: AbortSignal.timeout(10000),
-  });
+  }, 10000);
 
   if (!response.ok) {
     throw new Error(

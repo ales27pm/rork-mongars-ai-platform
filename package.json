@@ -75,13 +75,13 @@
   },
   "overrides": {
     "expo-location": "~19.0.8",
-    "expo-file-system": "~19.0.20",
-    "@teovilla/react-native-web-maps/expo-location": "~19.0.8"
+    "expo-file-system": "~19.0.20"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@expo/ngrok": "^4.1.0",
     "@types/react": "~19.1.10",
+    "@types/react-native": "^0.72.8",
     "babel-jest": "^30.2.0",
     "eslint": "^9.31.0",
     "eslint-config-expo": "~10.0.0",
