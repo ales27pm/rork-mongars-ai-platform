@@ -62,8 +62,7 @@ jobs:
           "
       - name: Install CocoaPods dependencies
         run: |
-          cd ios
-          bundle exec pod install
+          bundle exec pod install --project-directory=ios
       # Add your build steps here, e.g. Xcode build, archive, export, etc.
       # Example:
       # - name: Build iOS app
