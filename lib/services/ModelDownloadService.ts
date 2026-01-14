@@ -1,3 +1,4 @@
+
 import * as FileSystem from "expo-file-system/legacy";
 import { Paths } from "expo-file-system";
 import { Platform } from "react-native";
@@ -12,6 +13,16 @@ import {
   resolveModelRoot,
 } from "@/lib/services/model-download-utils";
 import { hfUrl, listRepoFiles } from "@/lib/services/huggingface-client";
+
+// Cross-platform fetch with timeout (works in React Native, Node, browser)
+function fetchWithTimeout(resource: RequestInfo, options: RequestInit = {}, timeout = 10000): Promise<Response> {
+  return Promise.race([
+    fetch(resource, options),
+    new Promise<Response>((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout')), timeout)
+    ),
+  ]);
+}
 
 export class ModelDownloadService {
   private static instance: ModelDownloadService;
@@ -185,11 +196,10 @@ export class ModelDownloadService {
       if (token) {
         headers.Authorization = `Bearer ${token}`;
       }
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: "HEAD",
         headers,
-        signal: AbortSignal.timeout(10000),
-      });
+      }, 10000);
       if (!response.ok) {
         return 0;
       }
@@ -221,13 +231,12 @@ export class ModelDownloadService {
       console.log(`  URL: ${url}`);
       console.log(`  Destination: ${localPath}`);
 
-      const headResponse = await fetch(url, {
+      const headResponse = await fetchWithTimeout(url, {
         method: "HEAD",
         headers: {
           "User-Agent": "Mozilla/5.0 (compatible; MLX-Download/1.0)",
         },
-        signal: AbortSignal.timeout(15000),
-      });
+      }, 15000);
 
       if (!headResponse.ok) {
         console.error(
