@@ -132,7 +132,7 @@ PLATFORMS
 
 DEPENDENCIES
   cocoapods (~> 1.15)
-  cocoapods-spm (~> 0.1)
+  cocoapods-spm (~> 0.1.16)
   prettier_print (~> 1.2)
   syntax_tree (~> 6.2)
 
