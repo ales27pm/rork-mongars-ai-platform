@@ -13,11 +13,8 @@ const MODEL_URLS = {
 };
 
 const getModelDir = (platform: ModelPlatform) => {
-  if (platform === 'android') {
-    return FileSystem.documentDirectory + 'models/';
-  }
-  // iOS
-  return FileSystem.documentDirectory + 'models/';
+  // Use cacheDirectory as a valid directory for both platforms
+  return FileSystem.cacheDirectory + 'models/';
 };
 
 export const downloadAndroidModel = async () => {
