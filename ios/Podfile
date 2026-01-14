@@ -1,13 +1,31 @@
-begin
-  require 'bundler/setup'
-rescue LoadError
-  # Bundler is optional; fall back to system gems if unavailable.
+require 'rbconfig'
+
+# EAS Build runs phases in separate processes; env exports from pre-install hooks do not
+# reliably carry into the CocoaPods phase. When Podfile loads, ensure RubyGems can see
+# the gems we installed under the per-user GEM_HOME (including cocoapods-spm).
+if ENV['GEM_HOME'].nil? || ENV['GEM_HOME'].empty?
+  # Match EAS iOS workers (Apple Silicon) default gem home.
+  arch = if RbConfig::CONFIG['host_cpu']&.include?('arm')
+    'arm64'
+  else
+    RbConfig::CONFIG['host_cpu']
+  end
+  ENV['GEM_HOME'] = File.join(ENV.fetch('HOME', Dir.home), '.gems', arch)
 end
+
+ENV['GEM_PATH'] = [ENV['GEM_HOME'], ENV['GEM_PATH']].compact.reject(&:empty?).join(':')
+Gem.clear_paths
 
 begin
   require 'cocoapods-spm'
 rescue LoadError => e
-  raise "cocoapods-spm must be available before pod install. Run bundle install and ensure cocoapods-spm is in the Gemfile. Original error: #{e.message}"
+  raise <<~MSG
+    cocoapods-spm must be available before pod install.
+    Ensure the iOS build installs Ruby gems (bundle install) and that GEM_HOME/GEM_PATH
+    are visible to the CocoaPods phase.
+
+    Original error: #{e.message}
+  MSG
 end
 
 plugin 'cocoapods-spm'
@@ -16,8 +34,8 @@ unless defined?(spm_pkg)
   raise 'cocoapods-spm is not loaded (spm_pkg undefined). Tokenizers/MLX SPM deps cannot be installed.'
 end
 
-require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
-require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
+require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), 'scripts/autolinking')
+require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), 'scripts/react_native_pods')
 
 require 'json'
 podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties.json'))) rescue {}
@@ -41,27 +59,29 @@ prepare_react_native_project!
 target 'monGARS' do
   use_expo_modules!
 
-  spm_pkg "mlx-swift",
-    :git => "https://github.com/ml-explore/mlx-swift",
-    :commit => "072b684acaae80b6a463abab3a103732f33774bf",
-    :products => ["MLX", "MLXRandom", "MLXNN", "MLXOptimizers", "MLXFFT", "MLXLinalg", "MLXFast"]
-  spm_pkg "mlx-swift-examples",
-    :git => "https://github.com/ml-explore/mlx-swift-examples",
-    :commit => "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631",
-    :products => ["MLXLLM", "MLXVLM", "MLXLMCommon", "MLXMNIST", "MLXEmbedders", "StableDiffusion"]
-  spm_pkg "swift-transformers",
-    :git => "https://github.com/huggingface/swift-transformers",
-    :version => "1.0.0",
-    :products => ["Tokenizers", "Transformers"]
+  spm_pkg 'mlx-swift',
+    :git => 'https://github.com/ml-explore/mlx-swift',
+    :commit => '072b684acaae80b6a463abab3a103732f33774bf',
+    :products => ['MLX', 'MLXRandom', 'MLXNN', 'MLXOptimizers', 'MLXFFT', 'MLXLinalg', 'MLXFast']
+  spm_pkg 'mlx-swift-examples',
+    :git => 'https://github.com/ml-explore/mlx-swift-examples',
+    :commit => '9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631',
+    :products => ['MLXLLM', 'MLXVLM', 'MLXLMCommon', 'MLXMNIST', 'MLXEmbedders', 'StableDiffusion']
+  spm_pkg 'swift-transformers',
+    :git => 'https://github.com/huggingface/swift-transformers',
+    :version => '1.0.0',
+    :products => ['Tokenizers', 'Transformers']
 
   pod 'NativeLLM', :path => '../modules/native-llm/ios'
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
-    config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"]; 
+    config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"]
   else
     config_command = [
-      'npx',
-      'expo-modules-autolinking',
+      'node',
+      '--no-warnings',
+      '--eval',
+      "require(require.resolve('expo-modules-autolinking', { paths: [require.resolve('expo/package.json')] }))(process.argv.slice(1))",
       'react-native-config',
       '--json',
       '--platform',
@@ -71,23 +91,27 @@ target 'monGARS' do
 
   config = use_native_modules!(config_command)
 
-  use_frameworks! :linkage => podfile_properties['ios.useFrameworks'].to_sym if podfile_properties['ios.useFrameworks']
-  use_frameworks! :linkage => ENV['USE_FRAMEWORKS'].to_sym if ENV['USE_FRAMEWORKS']
-
   use_react_native!(
     :path => config[:reactNativePath],
     :hermes_enabled => podfile_properties['expo.jsEngine'] == nil || podfile_properties['expo.jsEngine'] == 'hermes',
-    # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/..",
-    :privacy_file_aggregation_enabled => podfile_properties['apple.privacyManifestAggregationEnabled'] != 'false',
+    :privacy_file_aggregation_enabled => podfile_properties['apple.privacyManifestAggregationEnabled'] != 'false'
   )
+
+  use_frameworks! :linkage => podfile_properties['ios.useFrameworks'].to_sym if podfile_properties['ios.useFrameworks']
 
   post_install do |installer|
     react_native_post_install(
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
-      :ccache_enabled => ccache_enabled?(podfile_properties),
+      :ccache_enabled => ccache_enabled?(podfile_properties)
     )
+
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = podfile_properties['ios.deploymentTarget'] || '15.1'
+      end
+    end
   end
 end
