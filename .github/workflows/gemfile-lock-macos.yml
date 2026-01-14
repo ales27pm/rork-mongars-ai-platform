@@ -1,0 +1,27 @@
+name: Generate Gemfile.lock for macOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate-gemfile-lock:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Install Ruby gems
+        run: |
+          bundle install
+
+      - name: Upload Gemfile.lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gemfile.lock-macos
+          path: Gemfile.lock
