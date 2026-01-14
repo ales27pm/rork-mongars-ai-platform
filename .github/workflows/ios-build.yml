@@ -54,21 +54,64 @@ jobs:
           rm -rf vendor/bundle
           bundle install --jobs 4 --force
 
-      - name: Ensure GEM_HOME/GEM_PATH
-        run: |
-          echo "GEM_HOME: $GEM_HOME"
-          echo "GEM_PATH: $GEM_PATH"
-          export GEM_HOME=$(ruby -e 'print Gem.default_dir')
-          export GEM_PATH=$(ruby -e 'print Gem.path.join(":")')
-
       - name: Patch cocoapods-spm if needed
         run: |
+          set -euo pipefail
+
+          # Some CI environments don't expose the bundled cocoapods-spm version constant
+          # where the plugin expects it.
           bundle exec ruby -e "require 'fileutils'; spec = Gem::Specification.find_by_name('cocoapods-spm'); gem_dir = spec.gem_dir; gem_version_path = File.join(gem_dir, 'lib', 'cocoapods-spm', 'gem_version.rb'); unless File.exist?(gem_version_path); FileUtils.mkdir_p(File.dirname(gem_version_path)); File.write(gem_version_path, \"module CocoapodsSpm\n  GEM_VERSION = '#{spec.version}'\nend\n\"); puts \"patched cocoapods-spm gem_version.rb at #{gem_version_path}\"; end"
+
+          # cocoapods-spm 0.1.20 assumes CocoaPods always generates the per-config
+          # xcfilelist files for the embed frameworks / copy resources scripts.
+          # When a project has *no* resources for a given target/config, CocoaPods
+          # may legitimately skip generating the resources xcfilelists, causing an
+          # ENOENT in cocoapods-spm's post_integrate hooks.
+          #
+          # Patch the plugin to create missing xcfilelists on the fly.
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+
+          gem_dir = subprocess.check_output(
+              [
+                  "bundle",
+                  "exec",
+                  "ruby",
+                  "-e",
+                  "require 'rubygems'; print Gem::Specification.find_by_name('cocoapods-spm').gem_dir",
+              ]
+          ).decode("utf-8")
+
+          p = pathlib.Path(gem_dir) / "lib" / "cocoapods-spm" / "hooks" / "helpers" / "update_script.rb"
+          src = p.read_text(encoding="utf-8")
+
+          needle = 'target.send(method_name, config).open("r+") do |f|'
+          if needle not in src:
+              raise SystemExit(f"Expected pattern not found in {p}")
+
+          if "file_path = target.send(method_name, config)" in src:
+              print(f"cocoapods-spm already patched: {p}")
+              raise SystemExit(0)
+
+          patched = src.replace(
+              needle,
+              "file_path = target.send(method_name, config)\n"
+              "            FileUtils.mkdir_p(file_path.dirname) unless file_path.dirname.exist?\n"
+              "            file_path.write(\"\") unless file_path.exist?\n"
+              "            file_path.open(\"r+\") do |f|",
+          )
+
+          # Ensure FileUtils is available.
+          if "require 'fileutils'" not in patched:
+              patched = "require 'fileutils'\n" + patched
+
+          p.write_text(patched, encoding="utf-8")
+          print(f"Patched cocoapods-spm update_script.rb: {p}")
+          PY
 
       - name: Install CocoaPods dependencies
         run: |
-          export GEM_HOME=$(ruby -e 'print Gem.default_dir')
-          export GEM_PATH=$(ruby -e 'print Gem.path.join(":")')
           bundle exec pod install --project-directory=ios
 
       - name: Build iOS app
