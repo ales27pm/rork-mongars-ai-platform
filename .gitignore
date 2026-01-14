@@ -52,3 +52,5 @@ ios/Documents/tokenizer.json
 
 .env
 rork-eslint.config.js
+ios/
+android/
