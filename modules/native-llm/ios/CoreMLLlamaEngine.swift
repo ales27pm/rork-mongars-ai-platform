@@ -77,7 +77,7 @@ class CoreMLLlamaEngine {
   }
 
   private func categoricalSample(_ probs: [Float], seed: Int) -> Int {
-    var rng = seed == 0 ? SystemRandomNumberGenerator() : SeededGenerator(seed: seed)
+    var rng: any RandomNumberGenerator = seed == 0 ? SystemRandomNumberGenerator() : SeededGenerator(seed: seed)
     let r = Float.random(in: 0..<1, using: &rng)
     var acc: Float = 0
     for (i, p) in probs.enumerated() {
