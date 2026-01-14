@@ -1,86 +1,94 @@
-import { requireNativeModule } from 'native-llm';
+import { requireNativeModule } from 'expo';
 
-// Wrapper for the native module
-const nativeLLM = requireNativeModule('native-llm');
+interface NativeLLMModule {
+  loadModel(modelPath: string): Promise<string>;
+  generate(prompt: string): AsyncIterable<string>;
+  stop?(): void;
+}
+
+const nativeLLM: NativeLLMModule | null = (() => {
+  try {
+    return requireNativeModule('native-llm');
+  } catch {
+    console.warn('[NativeLLM] Native module not available, using mock');
+    return null;
+  }
+})();
 
 type LlmEventPayload = {
-    type: 'token' | 'done' | 'error' | 'status';
-    data: unknown;
+  type: 'token' | 'done' | 'error' | 'status';
+  data: unknown;
 };
 
 export class NativeLLMClient {
-    private listeners: { [key: string]: Function[] } = {};
+  private listeners: { [key: string]: ((data: unknown) => void)[] } = {};
 
-    constructor() {
-        // Initialize listeners or other configs if necessary
+  constructor() {
+    console.log('[NativeLLMClient] Initialized');
+  }
+
+  on(event: LlmEventPayload['type'], listener: (data: unknown) => void): void {
+    if (!this.listeners[event]) {
+      this.listeners[event] = [];
     }
+    this.listeners[event].push(listener);
+  }
 
-    on(event: LlmEventPayload['type'], listener: Function) {
-        if (!this.listeners[event]) {
-            this.listeners[event] = [];
+  off(event: LlmEventPayload['type'], listener: (data: unknown) => void): void {
+    if (!this.listeners[event]) return;
+    this.listeners[event] = this.listeners[event].filter((l) => l !== listener);
+  }
+
+  emit(event: LlmEventPayload['type'], data: unknown): void {
+    if (this.listeners[event]) {
+      this.listeners[event].forEach((listener) => listener(data));
+    }
+  }
+
+  async loadModel(modelPath: string): Promise<void> {
+    try {
+      if (!nativeLLM) {
+        this.emit('status', 'Mock: Model loaded (native module not available)');
+        return;
+      }
+      const result = await nativeLLM.loadModel(modelPath);
+      this.emit('status', 'Model Loaded: ' + result);
+    } catch (error) {
+      this.emit('error', error);
+    }
+  }
+
+  async generate(prompt: string): Promise<void> {
+    try {
+      if (!nativeLLM) {
+        const mockTokens = ['Hello', ' ', 'from', ' ', 'mock', ' ', 'LLM', '!'];
+        for (const token of mockTokens) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          this.emit('token', token);
         }
-        this.listeners[event].push(listener);
+        this.emit('done', null);
+        return;
+      }
+      const tokenStream = nativeLLM.generate(prompt);
+      for await (const token of tokenStream) {
+        this.emit('token', token);
+      }
+      this.emit('done', null);
+    } catch (error) {
+      this.emit('error', error);
     }
+  }
 
-    off(event: LlmEventPayload['type'], listener: Function) {
-        if (!this.listeners[event]) return;
-        this.listeners[event] = this.listeners[event].filter((l) => l !== listener);
+  stop(): void {
+    try {
+      if (nativeLLM?.stop) {
+        nativeLLM.stop();
+      }
+      this.emit('status', 'Generation stopped');
+    } catch (error) {
+      this.emit('error', error);
     }
-
-    emit(event: LlmEventPayload['type'], data: any) {
-        if (this.listeners[event]) {
-            this.listeners[event].forEach((listener) => listener(data));
-        }
-    }
-
-    async loadModel(modelPath: string) {
-        try {
-            const result = await nativeLLM.loadModel(modelPath);
-            this.emit('status', 'Model Loaded: ' + result);
-        } catch (error) {
-            this.emit('error', error);
-        }
-    }
-
-    async generate(prompt: string) {
-        try {
-            const tokenStream = nativeLLM.generate(prompt);
-            for await (const token of tokenStream) {
-                this.emit('token', token);
-            }
-            this.emit('done', null);
-        } catch (error) {
-            this.emit('error', error);
-        }
-    }
-
-    stop() {
-        try {
-            nativeLLM.stop?.();
-            this.emit('status', 'Generation stopped');
-        } catch (error) {
-            this.emit('error', error);
-        }
-    }
+  }
 }
 
-// CLI/Demo interface
-(async () => {
-    const client = new NativeLLMClient();
-
-    client.on('status', (data) => console.log('STATUS:', data));
-    client.on('token', (data) => console.log('TOKEN:', data));
-    client.on('done', () => console.log('GENERATION DONE'));
-    client.on('error', (err) => console.error('ERROR:', err));
-
-    console.log('Loading model...');
-    await client.loadModel('path/to/model');
-
-    console.log('Generating text...');
-    client.generate('Hello, world!');
-
-    setTimeout(() => {
-        console.log('Stopping generation...');
-        client.stop();
-    }, 5000);
-})();
+export const createNativeLLMClient = (): NativeLLMClient => new NativeLLMClient();
