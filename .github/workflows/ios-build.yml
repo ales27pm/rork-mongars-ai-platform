@@ -28,9 +28,9 @@ jobs:
         run: |
           npm install -g bun
 
-      - name: Install Ruby gems
+      - name: Force install all Ruby gems for macOS ARM64
         run: |
-          bundle install
+          bundle install --force --jobs 4
 
       - name: Patch cocoapods-spm if needed
         run: |
