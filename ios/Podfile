@@ -1,10 +1,13 @@
-require 'rbconfig'
+begin
 
-# EAS Build runs phases in separate processes; env exports from pre-install hooks do not
-# reliably carry into the CocoaPods phase. When Podfile loads, ensure RubyGems can see
-# the gems we installed under the per-user GEM_HOME (including cocoapods-spm).
+# --- BEGIN: RubyGems and cocoapods-spm bootstrap ---
+require 'rbconfig'
+require 'rubygems'
+
+# EAS runs build phases in separate processes, and env exports from pre-install hooks
+# don't reliably carry into the CocoaPods phase. Ensure RubyGems can see the gems we
+# installed (including cocoapods-spm) by force-setting GEM_HOME/GEM_PATH here.
 if ENV['GEM_HOME'].nil? || ENV['GEM_HOME'].empty?
-  # Match EAS iOS workers (Apple Silicon) default gem home.
   arch = if RbConfig::CONFIG['host_cpu']&.include?('arm')
     'arm64'
   else
@@ -14,7 +17,10 @@ if ENV['GEM_HOME'].nil? || ENV['GEM_HOME'].empty?
 end
 
 ENV['GEM_PATH'] = [ENV['GEM_HOME'], ENV['GEM_PATH']].compact.reject(&:empty?).join(':')
-Gem.clear_paths
+
+# Rebuild RubyGems internal paths now that we've set GEM_HOME/GEM_PATH.
+Gem.use_paths(ENV['GEM_HOME'], ENV['GEM_PATH'].split(':'))
+Gem.refresh
 
 begin
   require 'cocoapods-spm'
@@ -23,6 +29,9 @@ rescue LoadError => e
     cocoapods-spm must be available before pod install.
     Ensure the iOS build installs Ruby gems (bundle install) and that GEM_HOME/GEM_PATH
     are visible to the CocoaPods phase.
+
+    Expected GEM_HOME: #{ENV['GEM_HOME']}
+    GEM_PATH: #{ENV['GEM_PATH']}
 
     Original error: #{e.message}
   MSG
@@ -43,10 +52,10 @@ podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties
 def ccache_enabled?(podfile_properties)
   # Environment variable takes precedence
   return ENV['USE_CCACHE'] == '1' if ENV['USE_CCACHE']
-
   # Fall back to Podfile properties
   podfile_properties['apple.ccacheEnabled'] == 'true'
 end
+# --- END: RubyGems and cocoapods-spm bootstrap ---
 
 ENV['RCT_NEW_ARCH_ENABLED'] ||= '0' if podfile_properties['newArchEnabled'] == 'false'
 ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] ||= podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']

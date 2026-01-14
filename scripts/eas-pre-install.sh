@@ -9,7 +9,9 @@ fi
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-export GEM_HOME="${GEM_HOME:-$HOME/.gem}"
+ARCH="$(uname -m)"
+DEFAULT_GEM_HOME="$HOME/.gems/$ARCH"
+export GEM_HOME="${GEM_HOME:-$DEFAULT_GEM_HOME}"
 export PATH="${GEM_HOME}/bin:${PATH}"
 
 # Install bundle gems into GEM_HOME so non-bundler `pod install` can still
