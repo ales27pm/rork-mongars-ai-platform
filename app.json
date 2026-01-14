@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.rork.mongars",
+      "bundleIdentifier": "app.27pm.monGARS",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio",
