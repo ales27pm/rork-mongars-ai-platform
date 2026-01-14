@@ -7,6 +7,9 @@ on:
       - main
 
 jobs:
+        - name: Install JS dependencies
+          run: |
+            yarn install --frozen-lockfile || npm install
   ios-build:
     runs-on: macos-latest
     steps:
