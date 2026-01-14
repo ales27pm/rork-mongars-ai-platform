@@ -1,4 +1,5 @@
 apply from: new File(["node", "--print", "require.resolve('expo/scripts/autolinking')"].execute(null, rootDir).text.trim())
+
 pluginManagement {
   def reactNativeGradlePlugin = new File(
     providers.exec {
@@ -17,6 +18,8 @@ pluginManagement {
   ).absolutePath
   includeBuild(expoPluginsPath)
 }
+
+apply from: new File(["node", "--print", "require.resolve('expo/scripts/autolinking')"].execute(null, rootDir).text.trim())
 
 plugins {
   id("com.facebook.react.settings")
