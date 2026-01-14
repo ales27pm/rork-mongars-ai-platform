@@ -7,6 +7,12 @@ on:
       - main
 
 jobs:
+        - name: Print Ruby and Bundler versions
+          run: |
+            ruby -v
+            which ruby
+            gem env
+            bundler -v
   ios-build:
     runs-on: macos-latest
     steps:
@@ -29,9 +35,10 @@ jobs:
           npm install -g bun
 
       - name: Clean previous gems and set Ruby platform
+        env:
+          BUNDLE_FORCE_RUBY_PLATFORM: true
         run: |
           rm -rf vendor/bundle
-          export BUNDLE_FORCE_RUBY_PLATFORM=true
           bundle install --force --jobs 4
 
       - name: Patch cocoapods-spm if needed
