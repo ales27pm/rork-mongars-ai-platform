@@ -23,6 +23,17 @@ jobs:
         with:
           ruby-version: '3.2'
           bundler-cache: true
+      - name: Print Ruby versions and paths
+        run: |
+          which ruby
+          ruby -v
+          gem env
+          ls -l /opt/homebrew/Cellar/ruby/ || true
+          ls -l /Users/runner/hostedtoolcache/Ruby/ || true
+      - name: Remove all previous gems
+        run: |
+          gem uninstall -aIx || true
+          rm -rf vendor/bundle
       - name: Install Homebrew dependencies
         run: |
           brew install cocoapods
