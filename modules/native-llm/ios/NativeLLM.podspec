@@ -17,5 +17,5 @@ Pod::Spec.new do |s|
   s.static_framework = true
   s.swift_version = "5.9"
   s.dependency "ExpoModulesCore"
-  spm_dependency "swift-transformers/Tokenizers"
+  s.send(:spm_dependency, "swift-transformers/Tokenizers")
 end
