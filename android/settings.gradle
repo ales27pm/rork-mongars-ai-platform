@@ -1,4 +1,5 @@
 
+
 pluginManagement {
   def reactNativeGradlePlugin = new File(
     providers.exec {
@@ -18,12 +19,12 @@ pluginManagement {
   includeBuild(expoPluginsPath)
 }
 
-apply from: new File(["node", "--print", "require.resolve('expo/scripts/autolinking')"].execute(null, rootDir).text.trim())
-
 plugins {
   id("com.facebook.react.settings")
   id("expo-autolinking-settings")
 }
+
+apply from: new File(["node", "--print", "require.resolve('expo/scripts/autolinking')"].execute(null, rootDir).text.trim())
 
 extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
   if (System.getenv('EXPO_USE_COMMUNITY_AUTOLINKING') == '1') {
