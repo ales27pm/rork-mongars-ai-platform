@@ -1,4 +1,10 @@
 begin
+  require 'bundler/setup'
+rescue LoadError
+  # Bundler is optional; fall back to system gems if unavailable.
+end
+
+begin
   require 'cocoapods-spm'
 rescue LoadError => e
   raise "cocoapods-spm must be available before pod install. Run bundle install and ensure cocoapods-spm is in the Gemfile. Original error: #{e.message}"
