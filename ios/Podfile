@@ -84,6 +84,17 @@ require 'cocoapods-spm'
 plugin 'cocoapods-spm'
 
 unless defined?(spm_pkg)
+  begin
+    require 'cocoapods-spm/podfile_dsl'
+    if defined?(CocoapodsSpm::PodfileDSL) && defined?(Pod::Podfile::DSL)
+      Pod::Podfile::DSL.send(:include, CocoapodsSpm::PodfileDSL)
+    end
+  rescue LoadError
+    # no-op
+  end
+end
+
+unless defined?(spm_pkg)
   raise 'cocoapods-spm is not loaded (spm_pkg undefined). Tokenizers/MLX SPM deps cannot be installed.'
 end
 
