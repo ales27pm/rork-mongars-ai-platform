@@ -1,3 +1,18 @@
+# frozen_string_literal: true
+
+begin
+  require "cocoapods-spm"
+rescue LoadError => e
+  raise <<~MSG
+    [!] Invalid `Podfile` file: cocoapods-spm must be available before pod install.
+
+    EAS fix:
+      - Ensure your build runs: bash ./scripts/eas/ios_ruby_gems.sh
+      - This installs cocoapods-spm into the EAS GEM_HOME/GEM_PATH so Podfile + podspecs can use spm_dependency.
+
+    Original error: #{e.message}
+  MSG
+end
 
 # --- BEGIN: RubyGems and cocoapods-spm bootstrap ---
 require 'rbconfig'
