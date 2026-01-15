@@ -1,0 +1,77 @@
+{
+  "buildFiles": [
+    "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/CMakeLists.txt",
+    "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/CMakeLists.txt",
+    "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/cmake/build-info.cmake",
+    "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/cmake/common.cmake",
+    "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/cmake/license.cmake",
+    "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/cmake/llama-config.cmake.in",
+    "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/ggml/CMakeLists.txt",
+    "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/ggml/cmake/common.cmake",
+    "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/ggml/cmake/ggml-config.cmake.in",
+    "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/ggml/src/CMakeLists.txt",
+    "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/ggml/src/ggml-cpu/CMakeLists.txt",
+    "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/src/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/home/ales27pm/Android/Sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/home/ales27pm/Android/Sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "ggml::@6fb243c56d1be69d9933": {
+      "artifactName": "ggml",
+      "abi": "armeabi-v7a",
+      "output": "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libggml.so",
+      "runtimeFiles": [
+        "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libggml-cpu.so",
+        "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libggml-base.so"
+      ]
+    },
+    "llama::@bf716c64e9230b199072": {
+      "artifactName": "llama",
+      "abi": "armeabi-v7a",
+      "output": "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libllama.so",
+      "runtimeFiles": [
+        "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libggml.so",
+        "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libggml-cpu.so",
+        "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libggml-base.so"
+      ]
+    },
+    "ggml-base::@6fb243c56d1be69d9933": {
+      "artifactName": "ggml-base",
+      "abi": "armeabi-v7a",
+      "output": "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libggml-base.so",
+      "runtimeFiles": []
+    },
+    "ggml-cpu::@6fb243c56d1be69d9933": {
+      "artifactName": "ggml-cpu",
+      "abi": "armeabi-v7a",
+      "output": "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libggml-cpu.so",
+      "runtimeFiles": [
+        "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libggml-base.so",
+        "/home/ales27pm/Android/Sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/18/lib/linux/arm/libomp.so"
+      ]
+    },
+    "native_llm_jni::@6890427a1f51a3e7e1df": {
+      "artifactName": "native_llm_jni",
+      "abi": "armeabi-v7a",
+      "output": "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/build/intermediates/cxx/Debug/m3e1c1v4/obj/armeabi-v7a/libnative_llm_jni.so",
+      "runtimeFiles": [
+        "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libllama.so",
+        "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libggml.so",
+        "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libggml-cpu.so",
+        "/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a/bin/libggml-base.so"
+      ]
+    }
+  }
+}

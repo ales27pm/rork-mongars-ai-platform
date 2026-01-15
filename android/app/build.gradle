@@ -60,7 +60,11 @@ react {
     // hermesFlags = ["-O", "-output-source-map"]
 
     /* Autolinking */
-    autolinkLibrariesWithApp()
+    try {
+        autolinkLibrariesWithApp()
+    } catch (Exception e) {
+        println "Warning: autolinkLibrariesWithApp failed or skipped: ${e.message}"
+    }
 }
 
 /**
@@ -84,8 +88,14 @@ def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 android {
     ndkVersion rootProject.ext.ndkVersion
 
-    buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
+
+    // Ensure Gradle uses the requested CMake version for external native builds
+    externalNativeBuild {
+        cmake {
+            version rootProject.ext.cmakeVersion
+        }
+    }
 
     namespace 'com.rork.mongars'
     defaultConfig {
@@ -162,15 +172,15 @@ dependencies {
 
     if (isGifEnabled) {
         // For animated gif support
-        implementation("com.facebook.fresco:animated-gif:${expoLibs.versions.fresco.get()}")
+        implementation("com.facebook.fresco:animated-gif:${expoLibs.versions.fresco}")
     }
 
     if (isWebpEnabled) {
         // For webp support
-        implementation("com.facebook.fresco:webpsupport:${expoLibs.versions.fresco.get()}")
+        implementation("com.facebook.fresco:webpsupport:${expoLibs.versions.fresco}")
         if (isWebpAnimatedEnabled) {
             // Animated webp support
-            implementation("com.facebook.fresco:animated-webp:${expoLibs.versions.fresco.get()}")
+            implementation("com.facebook.fresco:animated-webp:${expoLibs.versions.fresco}")
         }
     }
 
@@ -179,4 +189,21 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+    // use local expo-modules-core project
+    implementation project(":expo-modules-core")
 }
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal() // Added to resolve plugins like kotlin-dsl
+    }
+    dependencies {
+        classpath 'com.facebook.react:react-native-gradle-plugin:0.72.0'
+    }
+}
+
+apply plugin: 'com.facebook.react'
+
+// ...existing code...

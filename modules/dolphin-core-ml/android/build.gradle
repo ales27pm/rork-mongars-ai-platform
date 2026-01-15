@@ -1,6 +1,7 @@
 apply plugin: 'com.android.library'
 apply plugin: 'org.jetbrains.kotlin.android'
-apply plugin: 'expo-modules-plugin'
+// Use the restored Expo plugin id from expo-modules-core
+apply plugin: 'expo-module-gradle-plugin'
 
 android {
   namespace "app.mongars.dolphincoreml"
@@ -9,6 +10,8 @@ android {
   defaultConfig {
     minSdkVersion 24
     targetSdkVersion 35
+    // Provide a version name for publishing/publication info
+    versionName "1.0"
   }
 
   sourceSets {
@@ -22,5 +25,6 @@ android {
 dependencies {
   implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
   implementation 'com.facebook.react:react-native:0.81.5'
-  implementation 'expo.modules:core'
+  // Use local expo-modules-core project instead of unresolved Maven coordinate
+  implementation project(':expo-modules-core')
 }

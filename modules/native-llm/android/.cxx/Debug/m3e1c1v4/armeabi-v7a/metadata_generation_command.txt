@@ -1,0 +1,19 @@
+                        -H/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp
+-DCMAKE_SYSTEM_NAME=Android
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-DCMAKE_SYSTEM_VERSION=24
+-DANDROID_PLATFORM=android-24
+-DANDROID_ABI=armeabi-v7a
+-DCMAKE_ANDROID_ARCH_ABI=armeabi-v7a
+-DANDROID_NDK=/home/ales27pm/Android/Sdk/ndk/27.0.12077973
+-DCMAKE_ANDROID_NDK=/home/ales27pm/Android/Sdk/ndk/27.0.12077973
+-DCMAKE_TOOLCHAIN_FILE=/home/ales27pm/Android/Sdk/ndk/27.0.12077973/build/cmake/android.toolchain.cmake
+-DCMAKE_MAKE_PROGRAM=/home/ales27pm/Android/Sdk/cmake/3.22.1/bin/ninja
+-DCMAKE_CXX_FLAGS=-std=c++17
+-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/build/intermediates/cxx/Debug/m3e1c1v4/obj/armeabi-v7a
+-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/build/intermediates/cxx/Debug/m3e1c1v4/obj/armeabi-v7a
+-DCMAKE_BUILD_TYPE=Debug
+-B/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/.cxx/Debug/m3e1c1v4/armeabi-v7a
+-GNinja
+                        Build command args: []
+                        Version: 2

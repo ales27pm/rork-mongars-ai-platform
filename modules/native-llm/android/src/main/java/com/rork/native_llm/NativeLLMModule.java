@@ -30,7 +30,10 @@ public class NativeLLMModule extends ReactContextBaseJavaModule {
         int nCtx = 2048;
         handle = nativeInit(modelPath, nThreads, nCtx);
         if (handle != 0) {
-            promise.resolve(Arguments.createMap().putBoolean("ok", true).putString("engine", "llama.cpp"));
+            WritableMap map = Arguments.createMap();
+            map.putBoolean("ok", true);
+            map.putString("engine", "llama.cpp");
+            promise.resolve(map);
         } else {
             promise.reject("LOAD_ERROR", "Failed to load model");
         }
@@ -48,25 +51,30 @@ public class NativeLLMModule extends ReactContextBaseJavaModule {
             nativeGenerate(handle, requestId, prompt, maxTokens, temperature, topK, seed, new Callback() {
                 @Override
                 public void onToken(String reqId, String token) {
-                    sendEvent("llmEvent", Arguments.createMap()
-                        .putString("type", "token")
-                        .putString("requestId", reqId)
-                        .putString("token", token));
+                    WritableMap evt = Arguments.createMap();
+                    evt.putString("type", "token");
+                    evt.putString("requestId", reqId);
+                    evt.putString("token", token);
+                    sendEvent("llmEvent", evt);
                 }
                 @Override
                 public void onDone(String reqId, String output) {
-                    sendEvent("llmEvent", Arguments.createMap()
-                        .putString("type", "done")
-                        .putString("requestId", reqId)
-                        .putString("output", output));
-                    promise.resolve(Arguments.createMap().putString("requestId", reqId));
+                    WritableMap evt = Arguments.createMap();
+                    evt.putString("type", "done");
+                    evt.putString("requestId", reqId);
+                    evt.putString("output", output);
+                    sendEvent("llmEvent", evt);
+                    WritableMap res = Arguments.createMap();
+                    res.putString("requestId", reqId);
+                    promise.resolve(res);
                 }
                 @Override
                 public void onError(String reqId, String message) {
-                    sendEvent("llmEvent", Arguments.createMap()
-                        .putString("type", "error")
-                        .putString("requestId", reqId)
-                        .putString("message", message));
+                    WritableMap errEvt = Arguments.createMap();
+                    errEvt.putString("type", "error");
+                    errEvt.putString("requestId", reqId);
+                    errEvt.putString("message", message);
+                    sendEvent("llmEvent", errEvt);
                     promise.reject("GEN_ERROR", message);
                 }
             });
@@ -76,7 +84,9 @@ public class NativeLLMModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void stop(String requestId, Promise promise) {
         nativeStop(requestId);
-        promise.resolve(Arguments.createMap().putBoolean("ok", true));
+        WritableMap stopRes = Arguments.createMap();
+        stopRes.putBoolean("ok", true);
+        promise.resolve(stopRes);
     }
 
     @ReactMethod

@@ -7,31 +7,35 @@ class DolphinCoreMLModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("DolphinCoreML")
 
-    AsyncFunction("initialize") { _: Map<String, Any?> ->
-      mapOf(
-        "success" to false,
-        "error" to mapOf(
-          "code" to "UNSUPPORTED_PLATFORM",
-          "message" to "DolphinCoreML is only available on iOS devices."
-        ),
-        "metadata" to emptyMap<String, Any>(),
-        "deviceInfo" to mapOf(
-          "deviceModel" to "Android",
-          "systemVersion" to android.os.Build.VERSION.RELEASE ?: "",
-          "processorCount" to Runtime.getRuntime().availableProcessors(),
-          "physicalMemory" to Runtime.getRuntime().maxMemory(),
-          "thermalState" to 0,
-          "isLowPowerModeEnabled" to false
-        )
+    AsyncFunction("initialize") {
+      val result = mutableMapOf<String, Any?>()
+      result["success"] = false
+      result["error"] = mapOf(
+        "code" to "UNSUPPORTED_PLATFORM",
+        "message" to "DolphinCoreML is only available on iOS devices."
       )
+      result["metadata"] = emptyMap<String, Any>()
+
+      val deviceInfo = mutableMapOf<String, Any?>()
+      deviceInfo["deviceModel"] = "Android"
+      deviceInfo["systemVersion"] = android.os.Build.VERSION.RELEASE ?: ""
+      deviceInfo["processorCount"] = Runtime.getRuntime().availableProcessors()
+      deviceInfo["physicalMemory"] = Runtime.getRuntime().maxMemory()
+      deviceInfo["thermalState"] = 0
+      deviceInfo["isLowPowerModeEnabled"] = false
+
+      result["deviceInfo"] = deviceInfo
+      result
     }
 
     AsyncFunction("generateStream") { _: String, _: Map<String, Any?>? ->
       throw UnsupportedOperationException("NO_MODEL_LOADED: DolphinCoreML is unavailable on Android")
+      Unit
     }
 
     AsyncFunction("encodeBatch") { _: List<String>, _: Map<String, Any?>? ->
       throw UnsupportedOperationException("NO_MODEL_LOADED: DolphinCoreML is unavailable on Android")
+      Unit
     }
 
     AsyncFunction("getMetrics") {

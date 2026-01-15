@@ -1,6 +1,8 @@
 apply plugin: 'com.android.library'
 
 android {
+    // Temporary namespace to satisfy AGP requirement. Adjust if needed.
+    namespace "com.mongars.native_llm"
     compileSdkVersion 34
     defaultConfig {
         minSdkVersion 24
@@ -30,5 +32,7 @@ android {
 }
 
 dependencies {
-    implementation 'com.facebook.react:react-native:+' // Required for React Native
+    // Depend on the ReactAndroid module coordinate so the included React Native composite build
+    // can substitute it (com.facebook.react:ReactAndroid -> local ReactAndroid project)
+    implementation 'com.facebook.react:ReactAndroid:+'
 }

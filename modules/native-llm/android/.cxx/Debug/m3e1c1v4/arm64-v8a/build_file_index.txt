@@ -1,0 +1,12 @@
+/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/CMakeLists.txt
+/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/CMakeLists.txt
+/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/cmake/build-info.cmake
+/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/cmake/common.cmake
+/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/cmake/license.cmake
+/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/cmake/llama-config.cmake.in
+/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/ggml/CMakeLists.txt
+/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/ggml/cmake/common.cmake
+/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/ggml/cmake/ggml-config.cmake.in
+/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/ggml/src/CMakeLists.txt
+/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/ggml/src/ggml-cpu/CMakeLists.txt
+/home/ales27pm/rork-mongars-ai-platform/modules/native-llm/android/src/main/cpp/third_party/llama.cpp/src/CMakeLists.txt
