@@ -43,7 +43,6 @@ jobs:
         run: |
           brew install cocoapods
           gem install cocoapods-spm --no-document
-          gem install fastlane --no-document
 
       - name: Prepare Ruby gems
         shell: bash
@@ -54,6 +53,7 @@ jobs:
           echo "GEM_PATH=$GEM_HOME:${GEM_PATH:-}" >> "$GITHUB_ENV"
           echo "$GEM_HOME/bin" >> "$GITHUB_PATH"
           gem install bundler --no-document
+          gem install fastlane --no-document
           bundle config set path "$GEM_HOME" > /dev/null
           bundle install --jobs 4 --retry 3
           bundle exec ruby -e "
