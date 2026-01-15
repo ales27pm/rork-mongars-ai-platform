@@ -2,6 +2,7 @@
 # --- BEGIN: RubyGems and cocoapods-spm bootstrap ---
 require 'rbconfig'
 require 'rubygems'
+require 'fileutils'
 
 # EAS runs build phases in separate processes, and env exports from pre-install hooks
 # don't reliably carry into the CocoaPods phase. Ensure RubyGems can see the gems we
@@ -14,6 +15,8 @@ if ENV['GEM_HOME'].nil? || ENV['GEM_HOME'].empty?
   end
   ENV['GEM_HOME'] = File.join(ENV.fetch('HOME', Dir.home), '.gems', arch)
 end
+
+FileUtils.mkdir_p(ENV['GEM_HOME'])
 
 ENV['GEM_PATH'] = [ENV['GEM_HOME'], ENV['GEM_PATH']].compact.reject(&:empty?).join(':')
 
