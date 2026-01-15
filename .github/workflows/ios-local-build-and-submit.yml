@@ -45,6 +45,19 @@ jobs:
           gem install cocoapods-spm --no-document
           gem install fastlane --no-document
 
+      - name: Prepare Ruby gems
+        shell: bash
+        run: |
+          set -euo pipefail
+          GEM_HOME="$HOME/.gems/$(uname -m)"
+          echo "GEM_HOME=$GEM_HOME" >> "$GITHUB_ENV"
+          echo "GEM_PATH=$GEM_HOME:${GEM_PATH:-}" >> "$GITHUB_ENV"
+          echo "$GEM_HOME/bin" >> "$GITHUB_PATH"
+          gem install bundler --no-document
+          bundle config set path "$GEM_HOME" > /dev/null
+          bundle install --jobs 4 --retry 3
+          bundle exec ruby -e "require 'cocoapods'; require 'cocoapods-spm'; puts 'OK: cocoapods + cocoapods-spm'"
+
       - name: Install JS dependencies
         shell: bash
         run: |
