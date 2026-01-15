@@ -113,6 +113,11 @@ jobs:
           echo "Cleared local provisioning profiles to force EAS remote fetch"
 
       - name: Build iOS (local)
+        env:
+          COCOAPODS_DISABLE_PLUGINS: "0"
+          GEM_HOME: ${{ env.GEM_HOME }}
+          GEM_PATH: ${{ env.GEM_PATH }}
+          RUBYOPT: "-r cocoapods-spm -r cocoapods-spm/podfile_dsl"
         run: |
           mkdir -p artifacts/ios
           eas build --platform ios --local --profile production --non-interactive --output artifacts/ios/build.ipa --clear-cache
