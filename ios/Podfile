@@ -7,15 +7,22 @@ require 'fileutils'
 # EAS runs build phases in separate processes, and env exports from pre-install hooks
 # don't reliably carry into the CocoaPods phase. Ensure RubyGems can see the gems we
 # installed (including cocoapods-spm) by force-setting GEM_HOME/GEM_PATH here.
-if ENV['GEM_HOME'].nil? || ENV['GEM_HOME'].empty?
-  arch = if RbConfig::CONFIG['host_cpu']&.include?('arm')
-    'arm64'
-  else
-    RbConfig::CONFIG['host_cpu']
-  end
-  ENV['GEM_HOME'] = File.join(ENV.fetch('HOME', Dir.home), '.gems', arch)
+arch = if RbConfig::CONFIG['host_cpu']&.include?('arm')
+  'arm64'
+else
+  RbConfig::CONFIG['host_cpu']
+end
+fallback_gem_home = File.join(ENV.fetch('HOME', Dir.home), '.gems', arch)
+
+gem_home_writable = if ENV['GEM_HOME'].nil? || ENV['GEM_HOME'].empty?
+  false
+elsif File.exist?(ENV['GEM_HOME'])
+  File.writable?(ENV['GEM_HOME'])
+else
+  File.writable?(File.dirname(ENV['GEM_HOME']))
 end
 
+ENV['GEM_HOME'] = fallback_gem_home unless gem_home_writable
 FileUtils.mkdir_p(ENV['GEM_HOME'])
 
 ENV['GEM_PATH'] = [ENV['GEM_HOME'], ENV['GEM_PATH']].compact.reject(&:empty?).join(':')
@@ -24,16 +31,23 @@ ENV['GEM_PATH'] = [ENV['GEM_HOME'], ENV['GEM_PATH']].compact.reject(&:empty?).jo
 Gem.use_paths(ENV['GEM_HOME'], ENV['GEM_PATH'].split(':'))
 Gem.refresh
 
-begin
-  require 'cocoapods-spm'
-rescue LoadError => e
-  # EAS build workers may invoke CocoaPods without running Bundler first.
-  # Self-heal by installing cocoapods-spm into GEM_HOME (user-writable) and retry.
-  spm_version = ENV.fetch('COCOAPODS_SPM_VERSION', '0.1.20')
-  puts "[Podfile] cocoapods-spm missing (#{e.message}). Attempting install cocoapods-spm@#{spm_version} into #{ENV['GEM_HOME']}…"
+def ensure_cocoapods_spm_gem_version!(spec)
+  gem_version_path = File.join(spec.gem_dir, 'lib', 'cocoapods-spm', 'gem_version.rb')
+  return if File.exist?(gem_version_path)
 
+  FileUtils.mkdir_p(File.dirname(gem_version_path))
+  File.write(gem_version_path, "module CocoapodsSpm\n  GEM_VERSION = '#{spec.version}'\nend\n")
+  puts "[Podfile] patched cocoapods-spm gem_version.rb at #{gem_version_path}"
+end
+
+def ensure_cocoapods_spm_installed!(gem_home)
+  spm_version = ENV.fetch('COCOAPODS_SPM_VERSION', '0.1.20')
+  spec = Gem::Specification.find_all_by_name('cocoapods-spm').max_by(&:version)
+  return spec if spec
+
+  puts "[Podfile] cocoapods-spm missing. Attempting install cocoapods-spm@#{spm_version} into #{gem_home}…"
   install_ok = system(
-    { 'GEM_HOME' => ENV['GEM_HOME'], 'GEM_PATH' => ENV['GEM_PATH'] },
+    { 'GEM_HOME' => gem_home, 'GEM_PATH' => ENV['GEM_PATH'] },
     RbConfig.ruby,
     '-S',
     'gem',
@@ -49,16 +63,18 @@ rescue LoadError => e
       cocoapods-spm must be available before pod install.
       Auto-install attempt failed.
 
-      GEM_HOME: #{ENV['GEM_HOME']}
+      GEM_HOME: #{gem_home}
       GEM_PATH: #{ENV['GEM_PATH']}
-
-      Original error: #{e.message}
     MSG
   end
 
   Gem.refresh
-  require 'cocoapods-spm'
+  Gem::Specification.find_by_name('cocoapods-spm')
 end
+
+spec = ensure_cocoapods_spm_installed!(ENV['GEM_HOME'])
+ensure_cocoapods_spm_gem_version!(spec)
+require 'cocoapods-spm'
 
 plugin 'cocoapods-spm'
 
