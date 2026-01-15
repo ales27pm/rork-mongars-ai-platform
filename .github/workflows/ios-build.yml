@@ -12,8 +12,7 @@ concurrency:
 
 jobs:
   ios-eas:
-    # EAS Build runs on Expo's workers, so this job does not need macOS.
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     env:
       CI: "1"
@@ -32,6 +31,16 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.0
+
+      - name: Install system dependencies (CocoaPods + cocoapods-spm)
+        run: |
+          brew install cocoapods
+          gem install cocoapods-spm --no-document
 
       - name: Install dependencies
         shell: bash
@@ -74,15 +83,16 @@ jobs:
           npm i -g eas-cli
           eas --version
 
-      - name: EAS Build (iOS, production)
+      - name: Build iOS (local)
         run: |
           set -euo pipefail
-          eas build --platform ios --profile production --non-interactive --wait
+          mkdir -p artifacts/ios
+          eas build --platform ios --local --profile production --non-interactive --output artifacts/ios/build.ipa --clear-cache
 
       - name: EAS Submit (iOS, production)
         run: |
           set -euo pipefail
-          eas submit --platform ios --profile production --non-interactive --latest
+          eas submit --platform ios --profile production --path artifacts/ios/build.ipa --non-interactive
 
       - name: Show latest build info
         if: always()
