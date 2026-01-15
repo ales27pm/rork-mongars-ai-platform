@@ -76,7 +76,27 @@ jobs:
         run: npm test -- --passWithNoTests
 
       - name: Format check
-        run: npx prettier --check .
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t format_files < <(
+            git ls-files \
+              '*.js' \
+              '*.ts' \
+              '*.tsx' \
+              '*.json' \
+              '*.yml' \
+              '*.yaml' \
+              '*.md' \
+              '*.cjs' \
+              '*.mjs' \
+              '*.sh'
+          )
+          if [ "${#format_files[@]}" -eq 0 ]; then
+            echo "No files to format-check."
+            exit 0
+          fi
+          npx prettier --check "${format_files[@]}"
 
       - name: Install EAS CLI
         run: |
