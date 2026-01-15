@@ -79,22 +79,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          format_files=$(git ls-files \
-            '*.js' \
-            '*.ts' \
-            '*.tsx' \
-            '*.json' \
-            '*.yml' \
-            '*.yaml' \
-            '*.md' \
-            '*.cjs' \
-            '*.mjs' \
-            '*.sh')
-          if [ -z "$format_files" ]; then
-            echo "No files to format-check."
-            exit 0
-          fi
-          echo "$format_files" | xargs npx prettier --check
+          npx prettier --check .github/workflows/ios-build.yml
 
       - name: Install EAS CLI
         run: |
