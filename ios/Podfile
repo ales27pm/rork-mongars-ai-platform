@@ -1,19 +1,47 @@
+# frozen_string_literal: true
+
+begin
+  require "cocoapods-spm"
+rescue LoadError => e
+  raise <<~MSG
+    [!] Invalid `Podfile` file: cocoapods-spm must be available before pod install.
+
+    EAS fix:
+      - Ensure your build runs: bash ./scripts/eas/ios_ruby_gems.sh
+      - This installs cocoapods-spm into the EAS GEM_HOME/GEM_PATH so Podfile + podspecs can use spm_dependency.
+
+    Original error: #{e.message}
+  MSG
+end
 
 # --- BEGIN: RubyGems and cocoapods-spm bootstrap ---
 require 'rbconfig'
 require 'rubygems'
+require 'fileutils'
 
 # EAS runs build phases in separate processes, and env exports from pre-install hooks
 # don't reliably carry into the CocoaPods phase. Ensure RubyGems can see the gems we
 # installed (including cocoapods-spm) by force-setting GEM_HOME/GEM_PATH here.
-if ENV['GEM_HOME'].nil? || ENV['GEM_HOME'].empty?
-  arch = if RbConfig::CONFIG['host_cpu']&.include?('arm')
-    'arm64'
-  else
-    RbConfig::CONFIG['host_cpu']
-  end
-  ENV['GEM_HOME'] = File.join(ENV.fetch('HOME', Dir.home), '.gems', arch)
+arch = if RbConfig::CONFIG['host_cpu']&.include?('arm')
+  'arm64'
+else
+  RbConfig::CONFIG['host_cpu']
 end
+home_dir = ENV.fetch('HOME', Dir.home)
+fallback_gem_home = File.join(home_dir, '.gems', arch)
+
+gem_home = ENV['GEM_HOME']
+gem_home_under_home = gem_home && !gem_home.empty? && gem_home.start_with?(home_dir)
+gem_home_writable = if gem_home.nil? || gem_home.empty?
+  false
+elsif File.exist?(gem_home)
+  File.writable?(gem_home)
+else
+  File.writable?(File.dirname(gem_home))
+end
+
+ENV['GEM_HOME'] = fallback_gem_home unless gem_home_under_home && gem_home_writable
+FileUtils.mkdir_p(ENV['GEM_HOME'])
 
 ENV['GEM_PATH'] = [ENV['GEM_HOME'], ENV['GEM_PATH']].compact.reject(&:empty?).join(':')
 
@@ -21,22 +49,65 @@ ENV['GEM_PATH'] = [ENV['GEM_HOME'], ENV['GEM_PATH']].compact.reject(&:empty?).jo
 Gem.use_paths(ENV['GEM_HOME'], ENV['GEM_PATH'].split(':'))
 Gem.refresh
 
-begin
-  require 'cocoapods-spm'
-rescue LoadError => e
-  raise <<~MSG
-    cocoapods-spm must be available before pod install.
-    Ensure the iOS build installs Ruby gems (bundle install) and that GEM_HOME/GEM_PATH
-    are visible to the CocoaPods phase.
+def ensure_cocoapods_spm_gem_version!(specs)
+  specs.each do |spec|
+    gem_version_path = File.join(spec.gem_dir, 'lib', 'cocoapods-spm', 'gem_version.rb')
+    next if File.exist?(gem_version_path)
 
-    Expected GEM_HOME: #{ENV['GEM_HOME']}
-    GEM_PATH: #{ENV['GEM_PATH']}
-
-    Original error: #{e.message}
-  MSG
+    FileUtils.mkdir_p(File.dirname(gem_version_path))
+    File.write(gem_version_path, "module CocoapodsSpm\n  GEM_VERSION = '#{spec.version}'\nend\n")
+    puts "[Podfile] patched cocoapods-spm gem_version.rb at #{gem_version_path}"
+  end
 end
 
+def ensure_cocoapods_spm_installed!(gem_home)
+  spm_version = ENV.fetch('COCOAPODS_SPM_VERSION', '0.1.20')
+  specs = Gem::Specification.find_all_by_name('cocoapods-spm')
+  return specs unless specs.empty?
+
+  puts "[Podfile] cocoapods-spm missing. Attempting install cocoapods-spm@#{spm_version} into #{gem_home}…"
+  install_ok = system(
+    { 'GEM_HOME' => gem_home, 'GEM_PATH' => ENV['GEM_PATH'] },
+    RbConfig.ruby,
+    '-S',
+    'gem',
+    'install',
+    'cocoapods-spm',
+    '-v',
+    spm_version,
+    '--no-document'
+  )
+
+  unless install_ok
+    raise <<~MSG
+      cocoapods-spm must be available before pod install.
+      Auto-install attempt failed.
+
+      GEM_HOME: #{gem_home}
+      GEM_PATH: #{ENV['GEM_PATH']}
+    MSG
+  end
+
+  Gem.refresh
+  Gem::Specification.find_all_by_name('cocoapods-spm')
+end
+
+specs = ensure_cocoapods_spm_installed!(ENV['GEM_HOME'])
+ensure_cocoapods_spm_gem_version!(specs)
+require 'cocoapods-spm'
+
 plugin 'cocoapods-spm'
+
+unless defined?(spm_pkg)
+  begin
+    require 'cocoapods-spm/podfile_dsl'
+    if defined?(CocoapodsSpm::PodfileDSL) && defined?(Pod::Podfile::DSL)
+      Pod::Podfile::DSL.send(:include, CocoapodsSpm::PodfileDSL)
+    end
+  rescue LoadError
+    # no-op
+  end
+end
 
 unless defined?(spm_pkg)
   raise 'cocoapods-spm is not loaded (spm_pkg undefined). Tokenizers/MLX SPM deps cannot be installed.'

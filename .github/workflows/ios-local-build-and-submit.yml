@@ -28,7 +28,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -39,10 +43,58 @@ jobs:
         run: |
           brew install cocoapods
           gem install cocoapods-spm --no-document
+
+      - name: Prepare Ruby gems
+        shell: bash
+        run: |
+          set -euo pipefail
+          GEM_HOME="$HOME/.gems/$(uname -m)"
+          echo "GEM_HOME=$GEM_HOME" >> "$GITHUB_ENV"
+          echo "GEM_PATH=$GEM_HOME:${GEM_PATH:-}" >> "$GITHUB_ENV"
+          echo "$GEM_HOME/bin" >> "$GITHUB_PATH"
+          gem install bundler --no-document
           gem install fastlane --no-document
+          bundle config set path "$GEM_HOME" > /dev/null
+          bundle install --jobs 4 --retry 3
+          bundle exec ruby -e "
+            require 'fileutils'
+            spec = Gem::Specification.find_by_name('cocoapods-spm')
+            gem_version_path = File.join(spec.gem_dir, 'lib', 'cocoapods-spm', 'gem_version.rb')
+            unless File.exist?(gem_version_path)
+              FileUtils.mkdir_p(File.dirname(gem_version_path))
+              File.write(gem_version_path, \"module CocoapodsSpm\\n  GEM_VERSION = '#{spec.version}'\\nend\\n\")
+            end
+            require 'cocoapods'
+            require 'cocoapods-spm'
+            puts 'OK: cocoapods + cocoapods-spm'
+          "
 
       - name: Install JS dependencies
-        run: npm ci
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f bun.lockb ] || [ -f bun.lock ]; then
+            echo "Using Bun"
+            bun --version
+            bun install --no-progress
+          elif [ -f yarn.lock ]; then
+            echo "Using Yarn with lockfile"
+            corepack enable
+            yarn --version
+            yarn install --frozen-lockfile --non-interactive
+          elif [ -f package-lock.json ]; then
+            echo "Using npm ci"
+            npm ci
+          elif [ -f pnpm-lock.yaml ]; then
+            echo "Using pnpm with lockfile"
+            corepack enable
+            corepack prepare pnpm@latest --activate
+            pnpm --version
+            pnpm install --frozen-lockfile
+          else
+            echo "No lockfile found; falling back to npm install"
+            npm install
+          fi
 
       - name: Install EAS CLI
         run: npm install -g eas-cli
@@ -61,6 +113,11 @@ jobs:
           echo "Cleared local provisioning profiles to force EAS remote fetch"
 
       - name: Build iOS (local)
+        env:
+          COCOAPODS_DISABLE_PLUGINS: "0"
+          GEM_HOME: ${{ env.GEM_HOME }}
+          GEM_PATH: ${{ env.GEM_PATH }}
+          RUBYOPT: "-r cocoapods-spm -r cocoapods-spm/podfile_dsl"
         run: |
           mkdir -p artifacts/ios
           eas build --platform ios --local --profile production --non-interactive --output artifacts/ios/build.ipa --clear-cache

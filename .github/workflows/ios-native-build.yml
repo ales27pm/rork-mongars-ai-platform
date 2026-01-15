@@ -38,10 +38,38 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+
+      - name: "🧈 Set up Bun"
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: "🤜 Install dependencies"
-        run: npm ci --legacy-peer-deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f bun.lockb ] || [ -f bun.lock ]; then
+            echo "Using Bun"
+            bun --version
+            bun install --no-progress
+          elif [ -f yarn.lock ]; then
+            echo "Using Yarn with lockfile"
+            corepack enable
+            yarn --version
+            yarn install --frozen-lockfile --non-interactive
+          elif [ -f package-lock.json ]; then
+            echo "Using npm ci"
+            npm ci --legacy-peer-deps
+          elif [ -f pnpm-lock.yaml ]; then
+            echo "Using pnpm with lockfile"
+            corepack enable
+            corepack prepare pnpm@latest --activate
+            pnpm --version
+            pnpm install --frozen-lockfile
+          else
+            echo "No lockfile found; falling back to npm install"
+            npm install --legacy-peer-deps
+          fi
 
       - name: "🛠️ Install EAS CLI"
         run: npm install -g eas-cli

@@ -15,6 +15,7 @@
     "start-web-dev": "DEBUG=expo* npx rork start -p 2agpgihkxtu4agpk7y6uc --web --tunnel",
     "eas-build-pre-install": "bash ./scripts/eas-pre-install.sh",
     "eas-build-pre-build": "bash ./scripts/eas-pre-build.sh",
+    "eas-build-post-install": "bash ./scripts/eas/ios_ruby_gems.sh",
     "lint": "expo lint",
     "test": "jest --runInBand",
     "postinstall": "patch-package",

@@ -17,5 +17,19 @@ Pod::Spec.new do |s|
   s.static_framework = true
   s.swift_version = "5.9"
   s.dependency "ExpoModulesCore"
-  s.send(:spm_dependency, "swift-transformers/Tokenizers")
+
+  if s.respond_to?(:spm_dependency)
+    s.spm_dependency "swift-transformers/Tokenizers"
+  else
+    raise <<~MSG
+      [NativeLLM.podspec] cocoapods-spm is not loaded, but this podspec requires SwiftPM dependencies.
+
+      Fix:
+        - Install cocoapods-spm gem AND load it at the top of ios/Podfile:
+            require "cocoapods-spm"
+
+        - On EAS, run:
+            bash ./scripts/eas/ios_ruby_gems.sh
+    MSG
+  end
 end
