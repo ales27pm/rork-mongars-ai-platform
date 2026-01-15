@@ -60,6 +60,15 @@ jobs:
             npm install
           fi
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test -- --passWithNoTests
+
+      - name: Format check
+        run: npx prettier --check .
+
       - name: Install EAS CLI
         run: |
           npm i -g eas-cli
