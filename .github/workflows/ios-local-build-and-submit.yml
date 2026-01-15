@@ -28,7 +28,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -42,7 +46,31 @@ jobs:
           gem install fastlane --no-document
 
       - name: Install JS dependencies
-        run: npm ci
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f bun.lockb ] || [ -f bun.lock ]; then
+            echo "Using Bun"
+            bun --version
+            bun install --no-progress
+          elif [ -f yarn.lock ]; then
+            echo "Using Yarn with lockfile"
+            corepack enable
+            yarn --version
+            yarn install --frozen-lockfile --non-interactive
+          elif [ -f package-lock.json ]; then
+            echo "Using npm ci"
+            npm ci
+          elif [ -f pnpm-lock.yaml ]; then
+            echo "Using pnpm with lockfile"
+            corepack enable
+            corepack prepare pnpm@latest --activate
+            pnpm --version
+            pnpm install --frozen-lockfile
+          else
+            echo "No lockfile found; falling back to npm install"
+            npm install
+          fi
 
       - name: Install EAS CLI
         run: npm install -g eas-cli
