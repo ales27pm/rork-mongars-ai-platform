@@ -56,7 +56,18 @@ jobs:
           gem install bundler --no-document
           bundle config set path "$GEM_HOME" > /dev/null
           bundle install --jobs 4 --retry 3
-          bundle exec ruby -e "require 'cocoapods'; require 'cocoapods-spm'; puts 'OK: cocoapods + cocoapods-spm'"
+          bundle exec ruby -e "
+            require 'fileutils'
+            spec = Gem::Specification.find_by_name('cocoapods-spm')
+            gem_version_path = File.join(spec.gem_dir, 'lib', 'cocoapods-spm', 'gem_version.rb')
+            unless File.exist?(gem_version_path)
+              FileUtils.mkdir_p(File.dirname(gem_version_path))
+              File.write(gem_version_path, \"module CocoapodsSpm\\n  GEM_VERSION = '#{spec.version}'\\nend\\n\")
+            end
+            require 'cocoapods'
+            require 'cocoapods-spm'
+            puts 'OK: cocoapods + cocoapods-spm'
+          "
 
       - name: Install JS dependencies
         shell: bash
