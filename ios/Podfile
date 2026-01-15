@@ -12,17 +12,20 @@ arch = if RbConfig::CONFIG['host_cpu']&.include?('arm')
 else
   RbConfig::CONFIG['host_cpu']
 end
-fallback_gem_home = File.join(ENV.fetch('HOME', Dir.home), '.gems', arch)
+home_dir = ENV.fetch('HOME', Dir.home)
+fallback_gem_home = File.join(home_dir, '.gems', arch)
 
-gem_home_writable = if ENV['GEM_HOME'].nil? || ENV['GEM_HOME'].empty?
+gem_home = ENV['GEM_HOME']
+gem_home_under_home = gem_home && !gem_home.empty? && gem_home.start_with?(home_dir)
+gem_home_writable = if gem_home.nil? || gem_home.empty?
   false
-elsif File.exist?(ENV['GEM_HOME'])
-  File.writable?(ENV['GEM_HOME'])
+elsif File.exist?(gem_home)
+  File.writable?(gem_home)
 else
-  File.writable?(File.dirname(ENV['GEM_HOME']))
+  File.writable?(File.dirname(gem_home))
 end
 
-ENV['GEM_HOME'] = fallback_gem_home unless gem_home_writable
+ENV['GEM_HOME'] = fallback_gem_home unless gem_home_under_home && gem_home_writable
 FileUtils.mkdir_p(ENV['GEM_HOME'])
 
 ENV['GEM_PATH'] = [ENV['GEM_HOME'], ENV['GEM_PATH']].compact.reject(&:empty?).join(':')
@@ -31,19 +34,21 @@ ENV['GEM_PATH'] = [ENV['GEM_HOME'], ENV['GEM_PATH']].compact.reject(&:empty?).jo
 Gem.use_paths(ENV['GEM_HOME'], ENV['GEM_PATH'].split(':'))
 Gem.refresh
 
-def ensure_cocoapods_spm_gem_version!(spec)
-  gem_version_path = File.join(spec.gem_dir, 'lib', 'cocoapods-spm', 'gem_version.rb')
-  return if File.exist?(gem_version_path)
+def ensure_cocoapods_spm_gem_version!(specs)
+  specs.each do |spec|
+    gem_version_path = File.join(spec.gem_dir, 'lib', 'cocoapods-spm', 'gem_version.rb')
+    next if File.exist?(gem_version_path)
 
-  FileUtils.mkdir_p(File.dirname(gem_version_path))
-  File.write(gem_version_path, "module CocoapodsSpm\n  GEM_VERSION = '#{spec.version}'\nend\n")
-  puts "[Podfile] patched cocoapods-spm gem_version.rb at #{gem_version_path}"
+    FileUtils.mkdir_p(File.dirname(gem_version_path))
+    File.write(gem_version_path, "module CocoapodsSpm\n  GEM_VERSION = '#{spec.version}'\nend\n")
+    puts "[Podfile] patched cocoapods-spm gem_version.rb at #{gem_version_path}"
+  end
 end
 
 def ensure_cocoapods_spm_installed!(gem_home)
   spm_version = ENV.fetch('COCOAPODS_SPM_VERSION', '0.1.20')
-  spec = Gem::Specification.find_all_by_name('cocoapods-spm').max_by(&:version)
-  return spec if spec
+  specs = Gem::Specification.find_all_by_name('cocoapods-spm')
+  return specs unless specs.empty?
 
   puts "[Podfile] cocoapods-spm missing. Attempting install cocoapods-spm@#{spm_version} into #{gem_home}…"
   install_ok = system(
@@ -69,11 +74,11 @@ def ensure_cocoapods_spm_installed!(gem_home)
   end
 
   Gem.refresh
-  Gem::Specification.find_by_name('cocoapods-spm')
+  Gem::Specification.find_all_by_name('cocoapods-spm')
 end
 
-spec = ensure_cocoapods_spm_installed!(ENV['GEM_HOME'])
-ensure_cocoapods_spm_gem_version!(spec)
+specs = ensure_cocoapods_spm_installed!(ENV['GEM_HOME'])
+ensure_cocoapods_spm_gem_version!(specs)
 require 'cocoapods-spm'
 
 plugin 'cocoapods-spm'
