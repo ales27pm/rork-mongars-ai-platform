@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@mlc-ai/web-llm": "^0.2.80",
     "@nkzw/create-context-hook": "^1.1.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/sdk-trace-web": "^2.3.0",
