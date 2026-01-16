@@ -16,6 +16,8 @@ import {
   generateRealEmbedding,
 } from "@/lib/utils/embedding";
 import { useInstrumentation } from "./instrumentation";
+import { Platform } from "react-native";
+import { webLLMService } from "@/lib/services/web-llm";
 
 const STORAGE_KEY = "mongars_llm_config";
 const CACHE_STORAGE_KEY = "mongars_llm_cache";
@@ -184,8 +186,8 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
           embedding?: ModelCacheEntry[];
         };
       } catch (parseError) {
-        console.error('[UnifiedLLM] Cache parse error:', parseError);
-        console.error('[UnifiedLLM] Corrupted cache data, clearing...');
+        console.error("[UnifiedLLM] Cache parse error:", parseError);
+        console.error("[UnifiedLLM] Corrupted cache data, clearing...");
         await AsyncStorage.removeItem(CACHE_STORAGE_KEY);
         return;
       }
@@ -232,7 +234,7 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
           );
           console.error(
             "[UnifiedLLM] Corrupted data preview:",
-            stored.substring(0, 100)
+            stored.substring(0, 100),
           );
           await AsyncStorage.removeItem(STORAGE_KEY);
         }
@@ -360,7 +362,11 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
         );
         console.log("[UnifiedLLM] On-device mode: using local CoreML model");
 
-        const response = await generateOnDevice(request.prompt, maxTokens);
+        const response = await generateOnDevice(
+          model,
+          request.prompt,
+          maxTokens,
+        );
 
         const duration = Date.now() - startTime;
 
@@ -393,6 +399,7 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
           );
           try {
             const response = await generateOnDevice(
+              fallbackModel,
               request.prompt,
               request.maxTokens || 100,
             );
@@ -454,12 +461,24 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
       try {
         console.log(`[UnifiedLLM] Embedding with ${model.name}`);
 
-        const embedding = await generateRealEmbedding(request.text).catch(
-          (err) => {
-            console.warn("[UnifiedLLM] Real embedding failed, using mock:", err);
-            return generateMockEmbedding(request.text);
-          },
-        );
+        let embedding: number[];
+
+        if (Platform.OS === "web" && model.provider === "webllm") {
+          try {
+            embedding = await webLLMService.generateEmbedding(request.text, {
+              modelId: model.modelId,
+              normalize: request.normalize ?? true,
+            });
+          } catch (error) {
+            console.warn(
+              "[UnifiedLLM] WebLLM embedding failed, falling back:",
+              error,
+            );
+            embedding = await generateRealEmbedding(request.text);
+          }
+        } else {
+          embedding = await generateRealEmbedding(request.text);
+        }
 
         const duration = Date.now() - startTime;
 
@@ -511,24 +530,42 @@ export const [UnifiedLLMProvider, useUnifiedLLM] = createContextHook(() => {
   );
 
   const generateOnDevice = async (
+    model: ModelConfig,
     prompt: string,
     maxTokens: number,
   ): Promise<string> => {
+    if (Platform.OS === "web") {
+      console.log("[UnifiedLLM] Using WebLLM generation via WebGPU");
+      if (model.provider !== "webllm") {
+        console.warn(
+          `[UnifiedLLM] Active model ${model.name} is not WebLLM-compatible; falling back to default WebLLM model`,
+        );
+      }
+      return webLLMService.generateText(prompt, {
+        modelId: model.provider === "webllm" ? model.modelId : undefined,
+        maxTokens,
+        temperature: 0.7,
+        topP: 0.9,
+      });
+    }
+
     console.log("[UnifiedLLM] Using on-device generation via DolphinCoreML");
-    
-    const { dolphinCoreML } = await import('@/lib/modules/DolphinCoreML');
-    
+
+    const { dolphinCoreML } = await import("@/lib/modules/DolphinCoreML");
+
     try {
       const response = await dolphinCoreML.generate(prompt, {
         maxTokens,
         temperature: 0.7,
         topP: 0.9,
       });
-      
-      console.log(`[UnifiedLLM] On-device generation complete: ${response.length} chars`);
+
+      console.log(
+        `[UnifiedLLM] On-device generation complete: ${response.length} chars`,
+      );
       return response;
     } catch (error) {
-      console.error('[UnifiedLLM] On-device generation failed:', error);
+      console.error("[UnifiedLLM] On-device generation failed:", error);
       throw error;
     }
   };

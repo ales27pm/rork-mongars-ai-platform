@@ -79,7 +79,7 @@ export interface SystemMetrics {
 export interface ModelConfig {
   id: string;
   name: string;
-  provider: "huggingface" | "openai" | "anthropic" | "local";
+  provider: "huggingface" | "openai" | "anthropic" | "local" | "webllm";
   modelId: string;
   quantization?: "4bit" | "8bit" | "fp16" | "fp32";
   contextWindow: number;
